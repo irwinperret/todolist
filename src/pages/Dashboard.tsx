@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { Person, TaskScore } from '../lib/types'
 import PriorityBadge from '../components/PriorityBadge'
+import { getFreedTasks, type FreedTask } from '../lib/dependencies'
+import FreedTasksModal from '../components/FreedTasksModal'
 
 const ME_DEBEN_STATUS_IDS = [3, 5] // Me deben, Recurrente
 const REVISAR_STATUS_ID = 4
@@ -19,6 +21,7 @@ export default function Dashboard() {
   const [bucket, setBucket] = useState<Bucket>('none')
   const [search, setSearch] = useState('')
   const [contactPerson, setContactPerson] = useState<Person | null>(null)
+  const [freedTasks, setFreedTasks] = useState<FreedTask[] | null>(null)
 
   const [projectFilter, setProjectFilter] = useState('')
   const [personFilter, setPersonFilter] = useState('')
@@ -72,6 +75,8 @@ export default function Dashboard() {
         .update({ resolved_at: new Date().toISOString() })
         .eq('depends_on_task_id', taskId)
         .is('resolved_at', null)
+      const freed = await getFreedTasks(taskId)
+      if (freed.length > 0) setFreedTasks(freed)
     } else {
       await supabase.from('task_dependencies').update({ resolved_at: null }).eq('depends_on_task_id', taskId)
     }
@@ -411,6 +416,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {freedTasks && <FreedTasksModal tasks={freedTasks} onClose={() => setFreedTasks(null)} />}
     </div>
   )
 }

@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { TaskFollowup, TaskPhoto, TaskScore, TaskLite, TaskVoiceNote } from '../lib/types'
+import { getFreedTasks, type FreedTask } from '../lib/dependencies'
+import FreedTasksModal from '../components/FreedTasksModal'
 
 type DependencyLite = TaskLite & { resolved_at: string | null }
 
@@ -35,6 +37,7 @@ export default function TaskDetail() {
   const [saving, setSaving] = useState(false)
   const [resolutionPrompt, setResolutionPrompt] = useState(false)
   const [resolutionText, setResolutionText] = useState('')
+  const [freedTasks, setFreedTasks] = useState<FreedTask[] | null>(null)
 
   const [dependsOn, setDependsOn] = useState<DependencyLite[]>([])
   const [blocks, setBlocks] = useState<DependencyLite[]>([])
@@ -312,7 +315,12 @@ export default function TaskDetail() {
       .eq('depends_on_task_id', id)
       .is('resolved_at', null)
     setResolutionPrompt(false)
-    navigate('/')
+    const freed = await getFreedTasks(id!)
+    if (freed.length > 0) {
+      setFreedTasks(freed)
+    } else {
+      navigate('/')
+    }
   }
 
   const handleReopen = async () => {
@@ -403,6 +411,7 @@ export default function TaskDetail() {
       <button onClick={handleDelete} className="w-full border border-red-200 text-red-600 rounded-lg py-3 text-sm">Borrar permanentemente</button></>}
 
       {resolutionPrompt && <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-20"><div className="bg-white rounded-t-2xl sm:rounded-2xl p-4 w-full sm:max-w-sm space-y-3"><p className="font-medium">¿Cómo se resolvió?</p><textarea value={resolutionText} onChange={(e) => setResolutionText(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" rows={3} placeholder="Resolución (opcional)" /><div className="flex gap-2"><button onClick={() => setResolutionPrompt(false)} className="flex-1 border border-gray-300 rounded-lg py-2.5 text-sm">Cancelar</button><button onClick={confirmComplete} className="flex-1 bg-green-600 text-white rounded-lg py-2.5 text-sm">Confirmar</button></div></div></div>}
+      {freedTasks && <FreedTasksModal tasks={freedTasks} onClose={() => navigate('/')} />}
     </div>
   )
 }
