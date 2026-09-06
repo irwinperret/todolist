@@ -133,7 +133,7 @@ export default function TaskDetail() {
       const { error } = await supabase.from('tasks').update(payload).eq('id', id)
       setSaving(false)
       if (error) return alert(error.message)
-      load()
+      navigate('/')
     }
   }
 

@@ -5,7 +5,7 @@ import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import PriorityBadge from '../components/PriorityBadge'
 
-const ME_DEBEN_STATUS_ID = 3
+const ME_DEBEN_STATUS_IDS = [3, 5] // Me deben, Recurrente
 const REVISAR_STATUS_ID = 4
 
 type Bucket = 'none' | 'meDeben' | 'revision'
@@ -49,11 +49,11 @@ export default function Dashboard() {
       // own to-dos: each shown only when its toggle is active, and both
       // hidden from the normal list otherwise.
       if (bucket === 'meDeben') {
-        if (t.status_id !== ME_DEBEN_STATUS_ID) return false
+        if (!ME_DEBEN_STATUS_IDS.includes(t.status_id)) return false
       } else if (bucket === 'revision') {
         if (t.status_id !== REVISAR_STATUS_ID) return false
       } else {
-        if (t.status_id === ME_DEBEN_STATUS_ID || t.status_id === REVISAR_STATUS_ID) return false
+        if (ME_DEBEN_STATUS_IDS.includes(t.status_id) || t.status_id === REVISAR_STATUS_ID) return false
       }
 
       if (projectFilter && t.project_id !== projectFilter) return false
