@@ -15,15 +15,23 @@ function buildTree(categories: MeetingCategory[]): CategoryNode[] {
   const nodes: Record<string, CategoryNode> = {}
   categories.forEach((c) => { nodes[c.id] = { ...c, children: [] } })
   const roots: CategoryNode[] = []
-  categories
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .forEach((c) => {
-      if (c.parent_id && nodes[c.parent_id]) {
-        nodes[c.parent_id].children.push(nodes[c.id])
-      } else if (!c.parent_id) {
-        roots.push(nodes[c.id])
-      }
-    })
+  categories.forEach((c) => {
+    if (c.parent_id && nodes[c.parent_id]) {
+      nodes[c.parent_id].children.push(nodes[c.id])
+    } else if (!c.parent_id) {
+      roots.push(nodes[c.id])
+    }
+  })
+
+  const sortByName = (a: CategoryNode, b: CategoryNode) =>
+    a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
+
+  const sortRecursive = (list: CategoryNode[]) => {
+    list.sort(sortByName)
+    list.forEach((n) => sortRecursive(n.children))
+  }
+  sortRecursive(roots)
+
   return roots
 }
 
