@@ -773,36 +773,38 @@ function ItemRowView(props: {
   }
 
   return (
-    <div ref={setNodeRef} style={dragStyle} className={`flex items-center gap-2 ${isDragging ? 'opacity-60' : ''}`}>
-      {grip}
-      <input
-        type="checkbox"
-        checked={item.is_done}
-        onChange={() => props.onToggleDone(item)}
-        className="w-4 h-4 shrink-0"
-      />
-      <span className={`text-sm flex-1 min-w-0 truncate ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-        {item.content}
-      </span>
-      <div className="flex gap-1 shrink-0">
-        <button
-          onClick={() => props.onOpenConvert(item, 2)}
-          className="text-xs bg-gray-100 text-gray-700 rounded-full px-2 py-0.5"
-        >
-          To Do
-        </button>
-        <button
-          onClick={() => props.onOpenConvert(item, 4)}
-          className="text-xs bg-blue-50 text-blue-800 rounded-full px-2 py-0.5"
-        >
-          Revisar
-        </button>
-        <button
-          onClick={() => props.onOpenConvert(item, 3)}
-          className="text-xs bg-[#e8ddd3] text-red-900 rounded-full px-2 py-0.5"
-        >
-          Me deben
-        </button>
+    <div ref={setNodeRef} style={dragStyle} className={isDragging ? 'opacity-60' : ''}>
+      <div className="flex items-center gap-2">
+        {grip}
+        <input
+          type="checkbox"
+          checked={item.is_done}
+          onChange={() => props.onToggleDone(item)}
+          className="w-4 h-4 shrink-0"
+        />
+        <span className={`text-sm flex-1 min-w-0 truncate ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+          {item.content}
+        </span>
+        <div className="flex gap-1 shrink-0">
+          <button
+            onClick={() => props.onOpenConvert(item, 2)}
+            className="text-xs bg-gray-100 text-gray-700 rounded-full px-2 py-0.5"
+          >
+            To Do
+          </button>
+          <button
+            onClick={() => props.onOpenConvert(item, 4)}
+            className="text-xs bg-blue-50 text-blue-800 rounded-full px-2 py-0.5"
+          >
+            Revisar
+          </button>
+          <button
+            onClick={() => props.onOpenConvert(item, 3)}
+            className="text-xs bg-[#e8ddd3] text-red-900 rounded-full px-2 py-0.5"
+          >
+            Me deben
+          </button>
+        </div>
       </div>
       {commentEditor}
     </div>
