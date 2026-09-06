@@ -97,6 +97,9 @@ export default function Dashboard() {
     setBucket((current) => (current === b ? 'none' : b))
   }
 
+  const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
+  const personForTask = (id: string | null) => people.find((p) => p.id === id) ?? null
+
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
       // "Me deben" and "Pendiente Revisión" are separate buckets from your
@@ -121,15 +124,13 @@ export default function Dashboard() {
       if (statusFilter && String(t.status_id) !== statusFilter) return false
       if (search) {
         const s = search.toLowerCase()
-        const hay = `${t.title} ${t.subactivity ?? ''} ${t.comment ?? ''}`.toLowerCase()
+        const responsibleName = people.find((p) => p.id === t.responsible_id)?.name ?? ''
+        const hay = `${t.title} ${t.subactivity ?? ''} ${t.comment ?? ''} ${projectName(t.project_id)} ${responsibleName}`.toLowerCase()
         if (!hay.includes(s)) return false
       }
       return true
     })
-  }, [tasks, projectFilter, personFilter, statusFilter, search, bucket])
-
-  const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
-  const personForTask = (id: string | null) => people.find((p) => p.id === id) ?? null
+  }, [tasks, projectFilter, personFilter, statusFilter, search, bucket, projects, people])
 
   const isDesktop = () => !/Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent)
 
