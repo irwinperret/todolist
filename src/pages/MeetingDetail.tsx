@@ -7,6 +7,7 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
+  closestCenter,
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
@@ -475,8 +476,8 @@ function MinuteCard(props: {
   const [newItemContent, setNewItemContent] = useState('')
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 12 } })
   )
 
   const tree = useMemo(() => buildTree(m.categories), [m.categories])
@@ -601,7 +602,7 @@ function MinuteCard(props: {
       )}
 
       {(tree.length > 0 || uncategorized.length > 0) && (
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <div className="space-y-4 pt-2 border-t border-gray-100">
             {tree.map((node) => (
               <CategoryBlock
@@ -751,7 +752,7 @@ function CategoryBlock(props: {
         </div>
       )}
 
-      <div ref={setNodeRef} className={`space-y-1.5 rounded-lg ${isOver ? 'bg-blue-50 ring-2 ring-blue-200' : ''} ${items.length === 0 ? 'min-h-[28px]' : ''}`}>
+      <div ref={setNodeRef} className={`space-y-1.5 rounded-lg ${isOver ? 'bg-blue-50 ring-2 ring-blue-200' : ''} ${items.length === 0 ? 'min-h-[40px]' : ''}`}>
         {items.length === 0 && <p className="text-xs text-gray-300 italic px-1">Suelta aquí para mover un item</p>}
         <SortableContext items={items.map((it) => it.id)} strategy={verticalListSortingStrategy}>
           {items.map((item) => (
@@ -785,7 +786,7 @@ function UncategorizedZone(props: { items: MeetingItem[]; itemActions: ItemActio
   return (
     <div className="space-y-1.5">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Sin categoría</p>
-      <div ref={setNodeRef} className={`space-y-1.5 rounded-lg ${isOver ? 'bg-blue-50 ring-2 ring-blue-200' : ''} ${props.items.length === 0 ? 'min-h-[28px]' : ''}`}>
+      <div ref={setNodeRef} className={`space-y-1.5 rounded-lg ${isOver ? 'bg-blue-50 ring-2 ring-blue-200' : ''} ${props.items.length === 0 ? 'min-h-[40px]' : ''}`}>
         {props.items.length === 0 && <p className="text-xs text-gray-300 italic px-1">Suelta aquí para quitar la categoría</p>}
         <SortableContext items={props.items.map((it) => it.id)} strategy={verticalListSortingStrategy}>
           {props.items.map((item) => (
