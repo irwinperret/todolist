@@ -976,23 +976,23 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
         ) : (
           contentView
         )}
-        <div className="flex gap-1 shrink-0 flex-wrap justify-end">
-          {!item.is_long_term && (
-            <>
-              <button onClick={() => actions.onOpenConvert(item, 2)} className="text-xs bg-green-50 text-green-800 rounded-full px-2 py-0.5">To Do</button>
-              <button onClick={() => actions.onOpenConvert(item, 4)} className="text-xs bg-blue-50 text-blue-800 rounded-full px-2 py-0.5">Revisar</button>
-              <button onClick={() => actions.onOpenConvert(item, 3)} className="text-xs bg-[#e8ddd3] text-red-900 rounded-full px-2 py-0.5">Me deben</button>
-            </>
-          )}
-          <button
-            onClick={() => actions.onToggleLongTerm(item)}
-            className={`text-xs rounded-full px-2 py-0.5 ${item.is_long_term ? 'bg-gray-300 text-gray-700' : 'bg-gray-100 text-gray-500'}`}
-            title={item.is_long_term ? 'Quitar de En el Radar' : 'Marcar como En el Radar'}
-          >
-            {item.is_long_term ? '✓ En el Radar' : 'En el Radar'}
-          </button>
-          <button onClick={() => actions.onDeleteItem(item)} className="text-xs text-red-400 px-1">✕</button>
-        </div>
+      </div>
+      <div className="flex gap-1 flex-wrap justify-end ml-7">
+        {!item.is_long_term && (
+          <>
+            <button onClick={() => actions.onOpenConvert(item, 2)} className="text-xs bg-green-50 text-green-800 rounded-full px-2 py-0.5">To Do</button>
+            <button onClick={() => actions.onOpenConvert(item, 4)} className="text-xs bg-blue-50 text-blue-800 rounded-full px-2 py-0.5">Revisar</button>
+            <button onClick={() => actions.onOpenConvert(item, 3)} className="text-xs bg-[#e8ddd3] text-red-900 rounded-full px-2 py-0.5">Me deben</button>
+          </>
+        )}
+        <button
+          onClick={() => actions.onToggleLongTerm(item)}
+          className={`text-xs rounded-full px-2 py-0.5 ${item.is_long_term ? 'bg-gray-300 text-gray-700' : 'bg-gray-100 text-gray-500'}`}
+          title={item.is_long_term ? 'Quitar de En el Radar' : 'Marcar como En el Radar'}
+        >
+          {item.is_long_term ? '✓ En el Radar' : 'En el Radar'}
+        </button>
+        <button onClick={() => actions.onDeleteItem(item)} className="text-xs text-red-400 px-1">✕</button>
       </div>
       {commentEditor}
     </div>
