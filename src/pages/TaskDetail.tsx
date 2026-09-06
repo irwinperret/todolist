@@ -102,8 +102,6 @@ export default function TaskDetail() {
     setVoiceNotes((vn as TaskVoiceNote[]) ?? [])
   }
 
-  // Creates a lightweight draft task on first attachment (photo/voice) if the
-  // user hasn't saved yet, so media capture never has to wait for typing.
   const ensureTaskId = async (): Promise<string | null> => {
     if (!isNew) return id ?? null
     if (draftIdRef.current) return draftIdRef.current
@@ -133,15 +131,10 @@ export default function TaskDetail() {
   }, [id])
 
   useEffect(() => {
-    // resolve signed urls for photo thumbnails
     photos.forEach(async (p) => {
       if (photoUrls[p.id]) return
-      const { data } = await supabase.storage
-        .from('task-photos')
-        .createSignedUrl(p.storage_path, 60 * 60)
-      if (data?.signedUrl) {
-        setPhotoUrls((prev) => ({ ...prev, [p.id]: data.signedUrl }))
-      }
+      const { data } = await supabase.storage.from('task-photos').createSignedUrl(p.storage_path, 60 * 60)
+      if (data?.signedUrl) setPhotoUrls((prev) => ({ ...prev, [p.id]: data.signedUrl }))
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos])
@@ -149,12 +142,8 @@ export default function TaskDetail() {
   useEffect(() => {
     voiceNotes.forEach(async (v) => {
       if (voiceUrls[v.id]) return
-      const { data } = await supabase.storage
-        .from('task-voice-notes')
-        .createSignedUrl(v.storage_path, 60 * 60)
-      if (data?.signedUrl) {
-        setVoiceUrls((prev) => ({ ...prev, [v.id]: data.signedUrl }))
-      }
+      const { data } = await supabase.storage.from('task-voice-notes').createSignedUrl(v.storage_path, 60 * 60)
+      if (data?.signedUrl) setVoiceUrls((prev) => ({ ...prev, [v.id]: data.signedUrl }))
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceNotes])
@@ -164,6 +153,15 @@ export default function TaskDetail() {
       if (timerRef.current) clearInterval(timerRef.current)
     }
   }, [])
+
+  const syncMeetingItems = async (taskId: string, title: string, comment: string | null, statusId: number | null | undefined) => {
+    const { error } = await supabase
+      .from('meeting_items')
+      .update({ content: title, comment, is_done: statusId === 8 })
+      .eq('task_id', taskId)
+    if (error) return error
+    return null
+  }
 
   const handleSave = async () => {
     if (!task.title || !task.project_id || !task.responsible_id) {
@@ -195,24 +193,22 @@ export default function TaskDetail() {
       navigate(`/task/${data.id}`, { replace: true })
     } else {
       const { error } = await supabase.from('tasks').update(payload).eq('id', id)
+      if (error) {
+        setSaving(false)
+        return alert(error.message)
+      }
+      const meetingError = await syncMeetingItems(id!, payload.title, payload.comment, payload.status_id)
       setSaving(false)
-      if (error) return alert(error.message)
+      if (meetingError) return alert(meetingError.message)
       draftIdRef.current = null
       navigate('/')
     }
   }
 
   const handleCancel = async () => {
-    // if a draft was auto-created just to attach a photo/voice note, and the
-    // person never actually saved it, discard it instead of leaving a stray
-    // near-empty task behind
     if (draftIdRef.current) {
-      if (photos.length > 0) {
-        await supabase.storage.from('task-photos').remove(photos.map((p) => p.storage_path))
-      }
-      if (voiceNotes.length > 0) {
-        await supabase.storage.from('task-voice-notes').remove(voiceNotes.map((v) => v.storage_path))
-      }
+      if (photos.length > 0) await supabase.storage.from('task-photos').remove(photos.map((p) => p.storage_path))
+      if (voiceNotes.length > 0) await supabase.storage.from('task-voice-notes').remove(voiceNotes.map((v) => v.storage_path))
       await supabase.from('tasks').delete().eq('id', draftIdRef.current)
     }
     navigate('/')
@@ -254,9 +250,7 @@ export default function TaskDetail() {
       const mimeType = pickMimeType()
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
       chunksRef.current = []
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
-      }
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop())
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
@@ -282,16 +276,12 @@ export default function TaskDetail() {
     setUploadingVoice(true)
     const ext = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm'
     const path = `${taskId}/${Date.now()}.${ext}`
-    const { error: uploadError } = await supabase.storage
-      .from('task-voice-notes')
-      .upload(path, blob, { contentType: mimeType || 'audio/webm' })
+    const { error: uploadError } = await supabase.storage.from('task-voice-notes').upload(path, blob, { contentType: mimeType || 'audio/webm' })
     if (uploadError) {
       setUploadingVoice(false)
       return alert(uploadError.message)
     }
-    const { error } = await supabase
-      .from('task_voice_notes')
-      .insert({ task_id: taskId, storage_path: path, duration_seconds: recordSeconds })
+    const { error } = await supabase.from('task_voice_notes').insert({ task_id: taskId, storage_path: path, duration_seconds: recordSeconds })
     setUploadingVoice(false)
     if (!error) load(taskId)
   }
@@ -303,33 +293,31 @@ export default function TaskDetail() {
     load()
   }
 
-  const handleComplete = async () => {
-    setResolutionPrompt(true)
-  }
+  const handleComplete = async () => setResolutionPrompt(true)
 
   const confirmComplete = async () => {
     const { error } = await supabase
       .from('tasks')
       .update({ status_id: 8, resolved_at: new Date().toISOString(), resolution_notes: resolutionText || null })
       .eq('id', id)
-    if (!error) {
-      setResolutionPrompt(false)
-      navigate('/')
-    }
+    if (error) return alert(error.message)
+    const meetingError = await supabase.from('meeting_items').update({ is_done: true }).eq('task_id', id)
+    if (meetingError.error) return alert(meetingError.error.message)
+    setResolutionPrompt(false)
+    navigate('/')
   }
 
   const handleReopen = async () => {
-    await supabase.from('tasks').update({ status_id: 2, resolved_at: null }).eq('id', id)
+    const { error } = await supabase.from('tasks').update({ status_id: 2, resolved_at: null }).eq('id', id)
+    if (error) return alert(error.message)
+    const { error: meetingError } = await supabase.from('meeting_items').update({ is_done: false }).eq('task_id', id)
+    if (meetingError) return alert(meetingError.message)
     load()
   }
 
   const handleCreatePerson = async () => {
     if (!newPersonName.trim()) return
-    const { data, error } = await supabase
-      .from('people')
-      .insert({ name: newPersonName.trim() })
-      .select()
-      .single()
+    const { data, error } = await supabase.from('people').insert({ name: newPersonName.trim() }).select().single()
     if (error) return alert(error.message)
     await reloadLookups()
     setTask((t) => ({ ...t, responsible_id: data.id }))
@@ -344,12 +332,8 @@ export default function TaskDetail() {
 
   const handleDelete = async () => {
     if (!confirm('¿Borrar esta tarea permanentemente? Esto también borra sus fotos, notas de voz, notas de seguimiento y dependencias. No se puede deshacer.')) return
-    if (photos.length > 0) {
-      await supabase.storage.from('task-photos').remove(photos.map((p) => p.storage_path))
-    }
-    if (voiceNotes.length > 0) {
-      await supabase.storage.from('task-voice-notes').remove(voiceNotes.map((v) => v.storage_path))
-    }
+    if (photos.length > 0) await supabase.storage.from('task-photos').remove(photos.map((p) => p.storage_path))
+    if (voiceNotes.length > 0) await supabase.storage.from('task-voice-notes').remove(voiceNotes.map((v) => v.storage_path))
     const { error } = await supabase.from('tasks').delete().eq('id', id)
     if (error) return alert(error.message)
     navigate('/')
@@ -357,403 +341,50 @@ export default function TaskDetail() {
 
   const searchDependencyCandidates = async (q: string) => {
     setDepSearch(q)
-    if (!q.trim()) {
-      setDepResults([])
-      return
-    }
+    if (!q.trim()) { setDepResults([]); return }
     setDepSearching(true)
     const excludeIds = new Set([id, ...dependsOn.map((t) => t.id)])
-    const { data } = await supabase
-      .from('tasks')
-      .select('id, title, status_id')
-      .ilike('title', `%${q.trim()}%`)
-      .eq('archived', false)
-      .limit(10)
+    const { data } = await supabase.from('tasks').select('id, title, status_id').ilike('title', `%${q.trim()}%`).eq('archived', false).limit(10)
     setDepResults(((data as TaskLite[]) ?? []).filter((t) => !excludeIds.has(t.id)))
     setDepSearching(false)
   }
 
   const addDependency = async (dependsOnTaskId: string) => {
     if (isNew) return
-    const { error } = await supabase
-      .from('task_dependencies')
-      .insert({ task_id: id, depends_on_task_id: dependsOnTaskId })
-    if (!error) {
-      setDepSearch('')
-      setDepResults([])
-      load()
-    }
+    const { error } = await supabase.from('task_dependencies').insert({ task_id: id, depends_on_task_id: dependsOnTaskId })
+    if (!error) { setDepSearch(''); setDepResults([]); load() }
   }
 
   const removeDependency = async (dependsOnTaskId: string) => {
-    await supabase
-      .from('task_dependencies')
-      .delete()
-      .eq('task_id', id)
-      .eq('depends_on_task_id', dependsOnTaskId)
+    await supabase.from('task_dependencies').delete().eq('task_id', id).eq('depends_on_task_id', dependsOnTaskId)
     load()
   }
 
   return (
     <div className="px-4 pt-4 pb-8 space-y-4">
       <div className="space-y-3 bg-white border border-gray-200 rounded-xl p-4">
-        <input
-          type="text"
-          placeholder="Título *"
-          value={task.title ?? ''}
-          onChange={(e) => setTask({ ...task, title: e.target.value })}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base font-medium"
-        />
-
-        <select
-          value={task.project_id ?? ''}
-          onChange={(e) => setTask({ ...task, project_id: e.target.value })}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-        >
-          <option value="">Proyecto *</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-
-        <select
-          value={task.responsible_id ?? ''}
-          onChange={(e) => {
-            if (e.target.value === '__new__') {
-              setCreatingPerson(true)
-            } else {
-              setTask({ ...task, responsible_id: e.target.value })
-            }
-          }}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-        >
-          <option value="">Responsable *</option>
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-          <option value="__new__">+ Agregar nuevo responsable...</option>
-        </select>
-
-        {creatingPerson && (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Nombre del nuevo responsable"
-              value={newPersonName}
-              onChange={(e) => setNewPersonName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreatePerson()}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-              autoFocus
-            />
-            <button onClick={handleCreatePerson} className="bg-gray-900 text-white rounded-lg px-4 text-sm">
-              Crear
-            </button>
-            <button
-              onClick={() => { setCreatingPerson(false); setNewPersonName('') }}
-              className="text-sm text-gray-400 px-2"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-2">
-          <select
-            value={task.priority_id ?? 4}
-            onChange={(e) => setTask({ ...task, priority_id: Number(e.target.value) })}
-            className="border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-          >
-            {priorities.map((p) => (
-              <option key={p.id} value={p.id}>{p.label}</option>
-            ))}
-          </select>
-          <select
-            value={task.status_id ?? 2}
-            onChange={(e) => setTask({ ...task, status_id: Number(e.target.value) })}
-            className="border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-          >
-            {statuses.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <button onClick={() => setShowMore((v) => !v)} className="text-sm text-gray-500 underline">
-          {showMore ? 'Ocultar detalles' : 'Agregar más detalle'}
-        </button>
-
-        {showMore && (
-          <div className="space-y-3 pt-2 border-t border-gray-100">
-            <input
-              type="text"
-              placeholder="Subactividad"
-              value={task.subactivity ?? ''}
-              onChange={(e) => setTask({ ...task, subactivity: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-            />
-            <input
-              type="text"
-              placeholder="Disciplina"
-              value={task.discipline ?? ''}
-              onChange={(e) => setTask({ ...task, discipline: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-            />
-            <select
-              value={task.indirect_id ?? ''}
-              onChange={(e) => setTask({ ...task, indirect_id: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-            >
-              <option value="">Involucrado (opcional)</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <input
-              type="text"
-              placeholder="Ubicación (opcional)"
-              value={task.location ?? ''}
-              onChange={(e) => setTask({ ...task, location: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-            />
-            <div>
-              <label className="text-xs text-gray-500">Fecha entrega</label>
-              <input
-                type="date"
-                value={task.due_date ?? ''}
-                onChange={(e) => setTask({ ...task, due_date: e.target.value || null })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500">Seguimiento (recordarme el)</label>
-              <input
-                type="date"
-                value={task.follow_up_date ?? ''}
-                onChange={(e) => setTask({ ...task, follow_up_date: e.target.value || null })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-              />
-            </div>
-            <textarea
-              placeholder="Comentario"
-              value={task.comment ?? ''}
-              onChange={(e) => setTask({ ...task, comment: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
-              rows={3}
-            />
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <button
-            onClick={handleCancel}
-            className="flex-1 border border-red-900 text-red-900 rounded-lg py-3 font-medium"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 bg-gray-900 text-white rounded-lg py-3 font-medium disabled:opacity-50"
-          >
-            {saving ? 'Guardando...' : isNew ? 'Crear tarea' : 'Guardar cambios'}
-          </button>
-        </div>
+        <input type="text" placeholder="Título *" value={task.title ?? ''} onChange={(e) => setTask({ ...task, title: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base font-medium" />
+        <select value={task.project_id ?? ''} onChange={(e) => setTask({ ...task, project_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"><option value="">Proyecto *</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+        <select value={task.responsible_id ?? ''} onChange={(e) => { if (e.target.value === '__new__') setCreatingPerson(true); else setTask({ ...task, responsible_id: e.target.value }) }} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"><option value="">Responsable *</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}<option value="__new__">+ Agregar nuevo responsable...</option></select>
+        {creatingPerson && <div className="flex gap-2"><input type="text" placeholder="Nombre del nuevo responsable" value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreatePerson()} className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-base" autoFocus /><button onClick={handleCreatePerson} className="bg-gray-900 text-white rounded-lg px-4 text-sm">Crear</button><button onClick={() => { setCreatingPerson(false); setNewPersonName('') }} className="text-sm text-gray-400 px-2">✕</button></div>}
+        <div className="grid grid-cols-2 gap-2"><select value={task.priority_id ?? 4} onChange={(e) => setTask({ ...task, priority_id: Number(e.target.value) })} className="border border-gray-300 rounded-lg px-3 py-2.5 text-base">{priorities.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select><select value={task.status_id ?? 2} onChange={(e) => setTask({ ...task, status_id: Number(e.target.value) })} className="border border-gray-300 rounded-lg px-3 py-2.5 text-base">{statuses.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
+        <button onClick={() => setShowMore((v) => !v)} className="text-sm text-gray-500 underline">{showMore ? 'Ocultar detalles' : 'Agregar más detalle'}</button>
+        {showMore && <div className="space-y-3 pt-2 border-t border-gray-100"><input type="text" placeholder="Subactividad" value={task.subactivity ?? ''} onChange={(e) => setTask({ ...task, subactivity: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><input type="text" placeholder="Disciplina" value={task.discipline ?? ''} onChange={(e) => setTask({ ...task, discipline: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><select value={task.indirect_id ?? ''} onChange={(e) => setTask({ ...task, indirect_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"><option value="">Involucrado (opcional)</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><input type="text" placeholder="Ubicación (opcional)" value={task.location ?? ''} onChange={(e) => setTask({ ...task, location: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><div><label className="text-xs text-gray-500">Fecha entrega</label><input type="date" value={task.due_date ?? ''} onChange={(e) => setTask({ ...task, due_date: e.target.value || null })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /></div><div><label className="text-xs text-gray-500">Seguimiento (recordarme el)</label><input type="date" value={task.follow_up_date ?? ''} onChange={(e) => setTask({ ...task, follow_up_date: e.target.value || null })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /></div><textarea placeholder="Comentario" value={task.comment ?? ''} onChange={(e) => setTask({ ...task, comment: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" rows={3} /></div>}
+        <div className="flex gap-2"><button onClick={handleCancel} className="flex-1 border border-red-900 text-red-900 rounded-lg py-3 font-medium">Cancelar</button><button onClick={handleSave} disabled={saving} className="flex-1 bg-gray-900 text-white rounded-lg py-3 font-medium disabled:opacity-50">{saving ? 'Guardando...' : isNew ? 'Crear tarea' : 'Guardar cambios'}</button></div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-        <p className="font-medium text-gray-900">Notas de voz</p>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Notas de voz</p>{!recording ? <button onClick={startRecording} disabled={uploadingVoice} className="w-full bg-red-700 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 disabled:opacity-50">🎤 {uploadingVoice ? 'Subiendo...' : 'Grabar nota de voz'}</button> : <button onClick={stopRecording} className="w-full bg-gray-900 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 animate-pulse">⏹ Detener ({Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')})</button>}{voiceNotes.length > 0 && <div className="space-y-2 pt-1">{voiceNotes.map((v) => <div key={v.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2">{voiceUrls[v.id] ? <audio controls src={voiceUrls[v.id]} className="flex-1 h-10" /> : <p className="text-xs text-gray-400 flex-1">Cargando...</p>}<button onClick={() => deleteVoiceNote(v)} className="text-xs text-red-500 shrink-0">Borrar</button></div>)}</div>}</div>
 
-        {!recording ? (
-          <button
-            onClick={startRecording}
-            disabled={uploadingVoice}
-            className="w-full bg-red-700 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            🎤 {uploadingVoice ? 'Subiendo...' : 'Grabar nota de voz'}
-          </button>
-        ) : (
-          <button
-            onClick={stopRecording}
-            className="w-full bg-gray-900 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 animate-pulse"
-          >
-            ⏹ Detener ({Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')})
-          </button>
-        )}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Fotos</p><div className="flex gap-2 flex-wrap">{photos.map((p) => <img key={p.id} src={photoUrls[p.id]} className="w-20 h-20 object-cover rounded-lg border border-gray-200" />)}<label className="w-20 h-20 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg text-gray-400 text-2xl cursor-pointer">+<input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handlePhotoUpload(file) }} /></label></div></div>
 
-        {voiceNotes.length > 0 && (
-          <div className="space-y-2 pt-1">
-            {voiceNotes.map((v) => (
-              <div key={v.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2">
-                {voiceUrls[v.id] ? (
-                  <audio controls src={voiceUrls[v.id]} className="flex-1 h-10" />
-                ) : (
-                  <p className="text-xs text-gray-400 flex-1">Cargando...</p>
-                )}
-                <button onClick={() => deleteVoiceNote(v)} className="text-xs text-red-500 shrink-0">
-                  Borrar
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {!isNew && <><div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Seguimiento</p><div className="flex gap-2"><input type="text" placeholder="Agregar nota..." value={newNote} onChange={(e) => setNewNote(e.target.value)} className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" /><button onClick={handleAddNote} className="bg-gray-900 text-white rounded-lg px-4 text-sm">Agregar</button></div><div className="space-y-2">{followups.map((f) => <div key={f.id} className="text-sm border-l-2 border-gray-200 pl-3"><p className="text-gray-800">{f.note}</p><p className="text-xs text-gray-400">{new Date(f.created_at).toLocaleString()}</p></div>)}{followups.length === 0 && <p className="text-sm text-gray-400">Sin notas todavía.</p>}</div></div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-        <p className="font-medium text-gray-900">Fotos</p>
-        <div className="flex gap-2 flex-wrap">
-          {photos.map((p) => (
-            <img
-              key={p.id}
-              src={photoUrls[p.id]}
-              className="w-20 h-20 object-cover rounded-lg border border-gray-200"
-            />
-          ))}
-          <label className="w-20 h-20 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg text-gray-400 text-2xl cursor-pointer">
-            +
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) handlePhotoUpload(file)
-              }}
-            />
-          </label>
-        </div>
-      </div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Dependencias</p><div><p className="text-xs text-gray-500 mb-1">Esta tarea depende de:</p>{dependsOn.length === 0 && <p className="text-sm text-gray-400">Ninguna</p>}<div className="space-y-1">{dependsOn.map((t) => <div key={t.id} className="flex items-center justify-between text-sm border-l-2 border-orange-300 pl-2 py-1"><Link to={`/task/${t.id}`} className="text-gray-800 truncate">{t.title}</Link><button onClick={() => removeDependency(t.id)} className="text-xs text-gray-400 shrink-0 ml-2">Quitar</button></div>)}</div></div><div className="relative"><input type="text" placeholder="Buscar tarea para agregar como dependencia..." value={depSearch} onChange={(e) => searchDependencyCandidates(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />{depSearching && <p className="text-xs text-gray-400 mt-1">Buscando...</p>}{depResults.length > 0 && <div className="border border-gray-200 rounded-lg mt-1 divide-y divide-gray-100 bg-white">{depResults.map((t) => <button key={t.id} onClick={() => addDependency(t.id)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">{t.title}</button>)}</div>}</div>{blocks.length > 0 && <div><p className="text-xs text-gray-500 mb-1">Esta tarea bloquea a:</p><div className="space-y-1">{blocks.map((t) => <Link key={t.id} to={`/task/${t.id}`} className="block text-sm border-l-2 border-red-300 pl-2 py-1 text-gray-800 truncate">{t.title}</Link>)}</div></div>}</div>
 
-      {!isNew && (
-        <>
-          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-            <p className="font-medium text-gray-900">Seguimiento</p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Agregar nota..."
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              />
-              <button onClick={handleAddNote} className="bg-gray-900 text-white rounded-lg px-4 text-sm">
-                Agregar
-              </button>
-            </div>
-            <div className="space-y-2">
-              {followups.map((f) => (
-                <div key={f.id} className="text-sm border-l-2 border-gray-200 pl-3">
-                  <p className="text-gray-800">{f.note}</p>
-                  <p className="text-xs text-gray-400">{new Date(f.created_at).toLocaleString()}</p>
-                </div>
-              ))}
-              {followups.length === 0 && <p className="text-sm text-gray-400">Sin notas todavía.</p>}
-            </div>
-          </div>
+      <div className="flex gap-2">{task.status_id === 8 ? <button onClick={handleReopen} className="flex-1 border border-gray-300 rounded-lg py-3 text-sm">Reabrir</button> : <button onClick={handleComplete} className="flex-1 bg-green-600 text-white rounded-lg py-3 text-sm">Marcar completada</button>}<button onClick={handleArchiveToggle} className="flex-1 border border-gray-300 rounded-lg py-3 text-sm">{task.archived ? 'Desarchivar' : 'Archivar'}</button></div>
+      <button onClick={handleDelete} className="w-full border border-red-200 text-red-600 rounded-lg py-3 text-sm">Borrar permanentemente</button></>}
 
-          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-            <p className="font-medium text-gray-900">Dependencias</p>
-
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Esta tarea depende de:</p>
-              {dependsOn.length === 0 && <p className="text-sm text-gray-400">Ninguna</p>}
-              <div className="space-y-1">
-                {dependsOn.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between text-sm border-l-2 border-orange-300 pl-2 py-1">
-                    <Link to={`/task/${t.id}`} className="text-gray-800 truncate">{t.title}</Link>
-                    <button onClick={() => removeDependency(t.id)} className="text-xs text-gray-400 shrink-0 ml-2">
-                      Quitar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Buscar tarea para agregar como dependencia..."
-                value={depSearch}
-                onChange={(e) => searchDependencyCandidates(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              />
-              {depSearching && <p className="text-xs text-gray-400 mt-1">Buscando...</p>}
-              {depResults.length > 0 && (
-                <div className="border border-gray-200 rounded-lg mt-1 divide-y divide-gray-100 bg-white">
-                  {depResults.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => addDependency(t.id)}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                    >
-                      {t.title}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {blocks.length > 0 && (
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Esta tarea bloquea a:</p>
-                <div className="space-y-1">
-                  {blocks.map((t) => (
-                    <Link
-                      key={t.id}
-                      to={`/task/${t.id}`}
-                      className="block text-sm border-l-2 border-red-300 pl-2 py-1 text-gray-800 truncate"
-                    >
-                      {t.title}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            {task.status_id === 8 ? (
-              <button onClick={handleReopen} className="flex-1 border border-gray-300 rounded-lg py-3 text-sm">
-                Reabrir
-              </button>
-            ) : (
-              <button onClick={handleComplete} className="flex-1 bg-green-600 text-white rounded-lg py-3 text-sm">
-                Marcar completada
-              </button>
-            )}
-            <button onClick={handleArchiveToggle} className="flex-1 border border-gray-300 rounded-lg py-3 text-sm">
-              {task.archived ? 'Desarchivar' : 'Archivar'}
-            </button>
-          </div>
-
-          <button onClick={handleDelete} className="w-full border border-red-200 text-red-600 rounded-lg py-3 text-sm">
-            Borrar permanentemente
-          </button>
-        </>
-      )}
-
-      {resolutionPrompt && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-20">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-4 w-full sm:max-w-sm space-y-3">
-            <p className="font-medium">¿Cómo se resolvió?</p>
-            <textarea
-              value={resolutionText}
-              onChange={(e) => setResolutionText(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              rows={3}
-              placeholder="Resolución (opcional)"
-            />
-            <div className="flex gap-2">
-              <button onClick={() => setResolutionPrompt(false)} className="flex-1 border border-gray-300 rounded-lg py-2.5 text-sm">
-                Cancelar
-              </button>
-              <button onClick={confirmComplete} className="flex-1 bg-green-600 text-white rounded-lg py-2.5 text-sm">
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {resolutionPrompt && <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-20"><div className="bg-white rounded-t-2xl sm:rounded-2xl p-4 w-full sm:max-w-sm space-y-3"><p className="font-medium">¿Cómo se resolvió?</p><textarea value={resolutionText} onChange={(e) => setResolutionText(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" rows={3} placeholder="Resolución (opcional)" /><div className="flex gap-2"><button onClick={() => setResolutionPrompt(false)} className="flex-1 border border-gray-300 rounded-lg py-2.5 text-sm">Cancelar</button><button onClick={confirmComplete} className="flex-1 bg-green-600 text-white rounded-lg py-2.5 text-sm">Confirmar</button></div></div></div>}
     </div>
   )
 }
