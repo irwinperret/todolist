@@ -937,7 +937,7 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
         <div className="flex gap-1 shrink-0 flex-wrap justify-end">
           {!item.is_long_term && (
             <>
-              <button onClick={() => actions.onOpenConvert(item, 2)} className="text-xs bg-gray-100 text-gray-700 rounded-full px-2 py-0.5">To Do</button>
+              <button onClick={() => actions.onOpenConvert(item, 2)} className="text-xs bg-green-50 text-green-800 rounded-full px-2 py-0.5">To Do</button>
               <button onClick={() => actions.onOpenConvert(item, 4)} className="text-xs bg-blue-50 text-blue-800 rounded-full px-2 py-0.5">Revisar</button>
               <button onClick={() => actions.onOpenConvert(item, 3)} className="text-xs bg-[#e8ddd3] text-red-900 rounded-full px-2 py-0.5">Me deben</button>
             </>
