@@ -315,7 +315,7 @@ export default function TaskDetail() {
       .eq('depends_on_task_id', id)
       .is('resolved_at', null)
     setResolutionPrompt(false)
-    const freed = await getFreedTasks(id!)
+    const freed = task.blocking_count && task.blocking_count > 0 ? await getFreedTasks(id!) : []
     if (freed.length > 0) {
       setFreedTasks(freed)
     } else {

@@ -44,7 +44,7 @@ export default function Dashboard() {
     load()
   }, [])
 
-  const updateStatus = async (taskId: string, newStatusId: number) => {
+  const updateStatus = async (taskId: string, newStatusId: number, blockingCount: number) => {
     const payload: { status_id: number; resolved_at?: string } =
       newStatusId === 8 ? { status_id: 8, resolved_at: new Date().toISOString() } : { status_id: newStatusId }
 
@@ -75,7 +75,7 @@ export default function Dashboard() {
         .update({ resolved_at: new Date().toISOString() })
         .eq('depends_on_task_id', taskId)
         .is('resolved_at', null)
-      const freed = await getFreedTasks(taskId)
+      const freed = blockingCount > 0 ? await getFreedTasks(taskId) : []
       if (freed.length > 0) setFreedTasks(freed)
     } else {
       await supabase.from('task_dependencies').update({ resolved_at: null }).eq('depends_on_task_id', taskId)
@@ -300,7 +300,7 @@ export default function Dashboard() {
                 >
                   <select
                     value={t.status_id}
-                    onChange={(e) => updateStatus(t.id, Number(e.target.value))}
+                    onChange={(e) => updateStatus(t.id, Number(e.target.value), t.blocking_count)}
                     className="text-xs bg-amber-100 text-amber-800 font-medium rounded-full pl-2 pr-1 py-0.5 border-0 appearance-none"
                   >
                     {statuses.map((s) => (
