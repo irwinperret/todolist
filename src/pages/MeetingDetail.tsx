@@ -14,6 +14,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } 
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
+import { RichText, RichTextArea, formatRichText } from '../components/RichText'
 import type { Meeting, MeetingMinute, MeetingItem, MeetingCategory, TaskScore, Project, Person, Status, PriorityLevel } from '../lib/types'
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
@@ -394,8 +395,8 @@ export default function MeetingDetail() {
             <input type="date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" />
           </div>
           <input type="text" placeholder="Asistentes (opcional)" value={attendees} onChange={(e) => setAttendees(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" />
-          <textarea placeholder="Minuta / temas tratados" value={minutaText} onChange={(e) => setMinutaText(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" rows={4} />
-          <textarea placeholder="Acuerdos generales (opcional)" value={acuerdos} onChange={(e) => setAcuerdos(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" rows={2} />
+          <RichTextArea value={minutaText} onChange={setMinutaText} placeholder="Minuta / temas tratados" rows={4} />
+          <RichTextArea value={acuerdos} onChange={setAcuerdos} placeholder="Acuerdos generales (opcional)" rows={2} />
           <div className="flex gap-2">
             <button onClick={() => setCreatingFirstMinute(false)} className="flex-1 border border-red-900 text-red-900 rounded-lg py-2.5 text-sm">Cancelar</button>
             <button onClick={handleCreateFirstMinute} disabled={saving} className="flex-1 bg-gray-900 text-white rounded-lg py-2.5 text-sm disabled:opacity-50">
@@ -572,8 +573,8 @@ function MinuteCard(props: {
             <input type="date" value={props.editDate} onChange={(e) => props.setEditDate(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
           </div>
           <input type="text" placeholder="Asistentes" value={props.editAttendees} onChange={(e) => props.setEditAttendees(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-          <textarea value={props.editMinuta} onChange={(e) => props.setEditMinuta(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" rows={4} />
-          <textarea placeholder="Acuerdos generales" value={props.editAcuerdos} onChange={(e) => props.setEditAcuerdos(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" rows={2} />
+          <RichTextArea value={props.editMinuta} onChange={props.setEditMinuta} rows={4} />
+          <RichTextArea value={props.editAcuerdos} onChange={props.setEditAcuerdos} placeholder="Acuerdos generales" rows={2} />
           <div className="flex gap-2">
             <button onClick={props.onCancelEdit} className="flex-1 border border-gray-300 rounded-lg py-2 text-sm">Cancelar</button>
             <button onClick={props.onSaveEdit} className="flex-1 bg-gray-900 text-white rounded-lg py-2 text-sm">Guardar</button>
@@ -591,11 +592,11 @@ function MinuteCard(props: {
             </div>
           </div>
           {m.attendees && <p className="text-xs text-gray-500"><span className="font-medium">Asistentes:</span> {m.attendees}</p>}
-          <p className="text-sm text-gray-800 whitespace-pre-wrap">{m.minuta}</p>
+          <RichText text={m.minuta} className="text-sm text-gray-800" />
           {m.acuerdos && (
             <div className="bg-amber-50 border border-amber-100 rounded-lg p-2">
               <p className="text-xs font-medium text-amber-800 mb-1">Acuerdos generales</p>
-              <p className="text-sm text-amber-900 whitespace-pre-wrap">{m.acuerdos}</p>
+              <RichText text={m.acuerdos} className="text-sm text-amber-900" />
             </div>
           )}
         </>
@@ -837,9 +838,13 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
           </div>
         </div>
       ) : displayedComment ? (
-        <button type="button" onClick={() => setEditingComment(true)} className="text-left text-xs text-purple-700 whitespace-pre-wrap hover:text-purple-900" title="Editar comentario">
-          {displayedComment}
-        </button>
+        <button
+          type="button"
+          onClick={() => setEditingComment(true)}
+          className="text-left text-xs text-purple-700 hover:text-purple-900"
+          title="Editar comentario"
+          dangerouslySetInnerHTML={{ __html: formatRichText(displayedComment) }}
+        />
       ) : (
         <button type="button" onClick={() => setEditingComment(true)} className="text-xs text-purple-500 hover:text-purple-700">+ Agregar comentario</button>
       )}
