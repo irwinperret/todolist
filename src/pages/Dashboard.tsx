@@ -5,14 +5,14 @@ import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import PriorityBadge from '../components/PriorityBadge'
 
-const FOLLOWUP_STALE_DAYS = 14
+const ME_DEBEN_STATUS_ID = 3
 
 export default function Dashboard() {
   const { projects, people, statuses } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [showFollowupOnly, setShowFollowupOnly] = useState(false)
+  const [showMeDeben, setShowMeDeben] = useState(false)
   const [search, setSearch] = useState('')
 
   const [projectFilter, setProjectFilter] = useState('')
@@ -36,10 +36,16 @@ export default function Dashboard() {
     load()
   }, [])
 
-  const lastFollowupByTask = useLastFollowupMap(tasks.map((t) => t.id))
-
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
+      // "Me deben" is a separate bucket from your own to-dos: shown only
+      // when the toggle is on, and hidden from the normal list otherwise.
+      if (showMeDeben) {
+        if (t.status_id !== ME_DEBEN_STATUS_ID) return false
+      } else {
+        if (t.status_id === ME_DEBEN_STATUS_ID) return false
+      }
+
       if (projectFilter && t.project_id !== projectFilter) return false
       if (personFilter && t.responsible_id !== personFilter) return false
       if (statusFilter && String(t.status_id) !== statusFilter) return false
@@ -48,16 +54,9 @@ export default function Dashboard() {
         const hay = `${t.title} ${t.subactivity ?? ''} ${t.comment ?? ''}`.toLowerCase()
         if (!hay.includes(s)) return false
       }
-      if (showFollowupOnly) {
-        const isOverdueFollowup = t.follow_up_date && new Date(t.follow_up_date) <= new Date()
-        const lastTouch = lastFollowupByTask[t.id] ?? t.created_at
-        const daysSince = (Date.now() - new Date(lastTouch).getTime()) / (1000 * 60 * 60 * 24)
-        const isStaleAndUrgent = t.priority_score >= 50 && daysSince >= FOLLOWUP_STALE_DAYS
-        if (!isOverdueFollowup && !isStaleAndUrgent) return false
-      }
       return true
     })
-  }, [tasks, projectFilter, personFilter, statusFilter, search, showFollowupOnly, lastFollowupByTask])
+  }, [tasks, projectFilter, personFilter, statusFilter, search, showMeDeben])
 
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
   const personName = (id: string | null) => people.find((p) => p.id === id)?.name ?? '—'
@@ -80,12 +79,12 @@ export default function Dashboard() {
           Filtros {filtersOpen ? '▲' : '▼'}
         </button>
         <button
-          onClick={() => setShowFollowupOnly((v) => !v)}
+          onClick={() => setShowMeDeben((v) => !v)}
           className={`flex-1 rounded-lg py-2 text-sm border ${
-            showFollowupOnly ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300'
+            showMeDeben ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300'
           }`}
         >
-          Requiere seguimiento
+          Me deben
         </button>
       </div>
 
@@ -126,7 +125,9 @@ export default function Dashboard() {
 
       {loading && <p className="text-gray-400 text-sm py-8 text-center">Cargando...</p>}
       {!loading && filtered.length === 0 && (
-        <p className="text-gray-400 text-sm py-8 text-center">Nada por aquí.</p>
+        <p className="text-gray-400 text-sm py-8 text-center">
+          {showMeDeben ? 'Nadie te debe nada por ahora.' : 'Nada por aquí.'}
+        </p>
       )}
 
       <div className="space-y-2">
@@ -171,30 +172,4 @@ export default function Dashboard() {
       </div>
     </div>
   )
-}
-
-// fetches only the most recent followup timestamp per task, to power the
-// "needs follow-up" heuristic without pulling the full followup log
-function useLastFollowupMap(taskIds: string[]) {
-  const [map, setMap] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    if (taskIds.length === 0) return
-    supabase
-      .from('task_followups')
-      .select('task_id, created_at')
-      .in('task_id', taskIds)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        if (!data) return
-        const m: Record<string, string> = {}
-        for (const row of data as { task_id: string; created_at: string }[]) {
-          if (!m[row.task_id]) m[row.task_id] = row.created_at
-        }
-        setMap(m)
-      })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskIds.join(',')])
-
-  return map
 }
