@@ -2,18 +2,36 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
-import type { Meeting, MeetingMinute, MeetingItem, TaskScore } from '../lib/types'
+import type { Meeting, MeetingMinute, MeetingItem, MeetingCategory, TaskScore } from '../lib/types'
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
-type ItemRow = { content: string; group: string }
-type MinuteWithItems = MeetingMinute & { items: MeetingItem[] }
+type CategoryDraft = { tempId: string; name: string; parentTempId: string | null }
+type ItemRow = { content: string; categoryTempId: string | null }
+type MinuteWithData = MeetingMinute & { items: MeetingItem[]; categories: MeetingCategory[] }
+type CategoryNode = MeetingCategory & { children: CategoryNode[] }
+
+function buildTree(categories: MeetingCategory[]): CategoryNode[] {
+  const nodes: Record<string, CategoryNode> = {}
+  categories.forEach((c) => { nodes[c.id] = { ...c, children: [] } })
+  const roots: CategoryNode[] = []
+  categories
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .forEach((c) => {
+      if (c.parent_id && nodes[c.parent_id]) {
+        nodes[c.parent_id].children.push(nodes[c.id])
+      } else if (!c.parent_id) {
+        roots.push(nodes[c.id])
+      }
+    })
+  return roots
+}
 
 export default function MeetingDetail() {
   const { id } = useParams()
   const { projects, people, statuses, priorities } = useLookups()
   const [meeting, setMeeting] = useState<Meeting | null>(null)
-  const [minutes, setMinutes] = useState<MinuteWithItems[]>([])
+  const [minutes, setMinutes] = useState<MinuteWithData[]>([])
   const [taskById, setTaskById] = useState<Record<string, TaskScore>>({})
   const [loading, setLoading] = useState(true)
 
@@ -22,8 +40,13 @@ export default function MeetingDetail() {
   const [attendees, setAttendees] = useState('')
   const [minutaText, setMinutaText] = useState('')
   const [acuerdos, setAcuerdos] = useState('')
-  const [itemRows, setItemRows] = useState<ItemRow[]>([{ content: '', group: '' }])
+  const [itemRows, setItemRows] = useState<ItemRow[]>([{ content: '', categoryTempId: null }])
   const [saving, setSaving] = useState(false)
+
+  const [categoryDrafts, setCategoryDrafts] = useState<CategoryDraft[]>([])
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [addingSubTo, setAddingSubTo] = useState<string | null>(null)
+  const [newSubName, setNewSubName] = useState('')
 
   const [convertingItemId, setConvertingItemId] = useState<string | null>(null)
   const [convProject, setConvProject] = useState('')
@@ -45,12 +68,15 @@ export default function MeetingDetail() {
     const minuteRows = (mm as MeetingMinute[]) ?? []
 
     let itemsByMinute: Record<string, MeetingItem[]> = {}
+    let categoriesByMinute: Record<string, MeetingCategory[]> = {}
     const taskIds: string[] = []
+
     if (minuteRows.length > 0) {
+      const minuteIds = minuteRows.map((r) => r.id)
       const { data: items } = await supabase
         .from('meeting_items')
         .select('*')
-        .in('meeting_minute_id', minuteRows.map((r) => r.id))
+        .in('meeting_minute_id', minuteIds)
         .order('sort_order')
         .order('created_at')
       for (const it of (items as MeetingItem[]) ?? []) {
@@ -58,9 +84,25 @@ export default function MeetingDetail() {
         itemsByMinute[it.meeting_minute_id].push(it)
         if (it.task_id) taskIds.push(it.task_id)
       }
+
+      const { data: cats } = await supabase
+        .from('meeting_categories')
+        .select('*')
+        .in('meeting_minute_id', minuteIds)
+        .order('sort_order')
+      for (const c of (cats as MeetingCategory[]) ?? []) {
+        categoriesByMinute[c.meeting_minute_id] = categoriesByMinute[c.meeting_minute_id] ?? []
+        categoriesByMinute[c.meeting_minute_id].push(c)
+      }
     }
 
-    setMinutes(minuteRows.map((r) => ({ ...r, items: itemsByMinute[r.id] ?? [] })))
+    setMinutes(
+      minuteRows.map((r) => ({
+        ...r,
+        items: itemsByMinute[r.id] ?? [],
+        categories: categoriesByMinute[r.id] ?? [],
+      }))
+    )
 
     if (taskIds.length > 0) {
       const { data: tasks } = await supabase.from('task_scores').select('*').in('id', taskIds)
@@ -79,11 +121,63 @@ export default function MeetingDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  const updateItemRow = (idx: number, field: keyof ItemRow, value: string) => {
+  // ---- composition: categories ----
+  const addTopCategory = () => {
+    if (!newCategoryName.trim()) return
+    setCategoryDrafts((prev) => [
+      ...prev,
+      { tempId: crypto.randomUUID(), name: newCategoryName.trim(), parentTempId: null },
+    ])
+    setNewCategoryName('')
+  }
+
+  const addSubCategory = (parentTempId: string) => {
+    if (!newSubName.trim()) return
+    setCategoryDrafts((prev) => [
+      ...prev,
+      { tempId: crypto.randomUUID(), name: newSubName.trim(), parentTempId },
+    ])
+    setNewSubName('')
+    setAddingSubTo(null)
+  }
+
+  const removeCategoryDraft = (tempId: string) => {
+    setCategoryDrafts((prev) => prev.filter((c) => c.tempId !== tempId && c.parentTempId !== tempId))
+    setItemRows((prev) =>
+      prev.map((r) => (r.categoryTempId === tempId ? { ...r, categoryTempId: null } : r))
+    )
+  }
+
+  const draftOptions = useMemo(() => {
+    const out: { tempId: string; label: string }[] = []
+    const walk = (parentId: string | null, depth: number) => {
+      categoryDrafts
+        .filter((c) => c.parentTempId === parentId)
+        .forEach((c) => {
+          out.push({ tempId: c.tempId, label: `${'— '.repeat(depth)}${c.name}` })
+          walk(c.tempId, depth + 1)
+        })
+    }
+    walk(null, 0)
+    return out
+  }, [categoryDrafts])
+
+  // ---- composition: items ----
+  const updateItemRow = (idx: number, field: keyof ItemRow, value: string | null) => {
     setItemRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r)))
   }
-  const addItemRow = () => setItemRows((prev) => [...prev, { content: '', group: '' }])
+  const addItemRow = () => setItemRows((prev) => [...prev, { content: '', categoryTempId: null }])
   const removeItemRow = (idx: number) => setItemRows((prev) => prev.filter((_, i) => i !== idx))
+
+  const resetForm = () => {
+    setMeetingDate(todayStr())
+    setAttendees('')
+    setMinutaText('')
+    setAcuerdos('')
+    setItemRows([{ content: '', categoryTempId: null }])
+    setCategoryDrafts([])
+    setShowForm(false)
+  }
 
   const handleSave = async () => {
     if (!minutaText.trim()) {
@@ -108,30 +202,48 @@ export default function MeetingDetail() {
       return alert(error.message)
     }
 
+    // insert categories parents first, then children, mapping temp -> real id
+    const tempToReal: Record<string, string> = {}
+    const parents = categoryDrafts.filter((c) => !c.parentTempId)
+    for (let i = 0; i < parents.length; i++) {
+      const { data: cat } = await supabase
+        .from('meeting_categories')
+        .insert({ meeting_minute_id: minute.id, parent_id: null, name: parents[i].name, sort_order: i })
+        .select()
+        .single()
+      if (cat) tempToReal[parents[i].tempId] = cat.id
+    }
+    const children = categoryDrafts.filter((c) => c.parentTempId)
+    for (let i = 0; i < children.length; i++) {
+      const realParentId = tempToReal[children[i].parentTempId!]
+      if (!realParentId) continue
+      const { data: cat } = await supabase
+        .from('meeting_categories')
+        .insert({ meeting_minute_id: minute.id, parent_id: realParentId, name: children[i].name, sort_order: i })
+        .select()
+        .single()
+      if (cat) tempToReal[children[i].tempId] = cat.id
+    }
+
     const validItems = itemRows.filter((r) => r.content.trim())
     if (validItems.length > 0) {
       await supabase.from('meeting_items').insert(
         validItems.map((r, idx) => ({
           meeting_minute_id: minute.id,
           content: r.content.trim(),
-          group_label: r.group.trim() || null,
+          category_id: r.categoryTempId ? tempToReal[r.categoryTempId] ?? null : null,
           sort_order: idx,
         }))
       )
     }
 
     setSaving(false)
-    setMeetingDate(todayStr())
-    setAttendees('')
-    setMinutaText('')
-    setAcuerdos('')
-    setItemRows([{ content: '', group: '' }])
-    setShowForm(false)
+    resetForm()
     load()
   }
 
   const handleDeleteMinute = async (minuteId: string) => {
-    if (!confirm('¿Borrar esta minuta y sus items? Las tareas ya creadas NO se borran, solo se desvinculan. No se puede deshacer.')) return
+    if (!confirm('¿Borrar esta minuta, sus categorías e items? Las tareas ya creadas NO se borran, solo se desvinculan. No se puede deshacer.')) return
     await supabase.from('meeting_minutes').delete().eq('id', minuteId)
     load()
   }
@@ -227,18 +339,72 @@ export default function MeetingDetail() {
           />
 
           <div className="space-y-2 pt-2 border-t border-gray-100">
-            <p className="text-xs text-gray-500">
-              Items del checklist. El grupo (opcional) organiza los items en secciones, ej. "IPA", "FENOFF - Safety"
-            </p>
+            <p className="text-xs text-gray-500">Categorías (opcional, para agrupar los items)</p>
+
+            {categoryDrafts.filter((c) => !c.parentTempId).map((cat) => (
+              <div key={cat.tempId} className="space-y-1">
+                <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-1.5">
+                  <span className="text-sm font-medium text-gray-800">{cat.name}</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => setAddingSubTo(cat.tempId)} className="text-xs text-blue-600">
+                      + Subcategoría
+                    </button>
+                    <button onClick={() => removeCategoryDraft(cat.tempId)} className="text-xs text-gray-400">
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                {categoryDrafts.filter((c) => c.parentTempId === cat.tempId).map((sub) => (
+                  <div key={sub.tempId} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-1 ml-4">
+                    <span className="text-xs text-gray-700">— {sub.name}</span>
+                    <button onClick={() => removeCategoryDraft(sub.tempId)} className="text-xs text-gray-400">✕</button>
+                  </div>
+                ))}
+                {addingSubTo === cat.tempId && (
+                  <div className="flex gap-2 ml-4">
+                    <input
+                      type="text"
+                      placeholder="Nombre de subcategoría"
+                      value={newSubName}
+                      onChange={(e) => setNewSubName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && addSubCategory(cat.tempId)}
+                      className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs"
+                      autoFocus
+                    />
+                    <button onClick={() => addSubCategory(cat.tempId)} className="text-xs text-green-600">Agregar</button>
+                    <button onClick={() => { setAddingSubTo(null); setNewSubName('') }} className="text-xs text-gray-400">Cancelar</button>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Nueva categoría (ej. IPA, FENOFF)"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addTopCategory()}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              <button onClick={addTopCategory} className="text-xs text-blue-600 shrink-0 px-2">+ Agregar</button>
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-gray-100">
+            <p className="text-xs text-gray-500">Items</p>
             {itemRows.map((r, idx) => (
               <div key={idx} className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Grupo (opcional)"
-                  value={r.group}
-                  onChange={(e) => updateItemRow(idx, 'group', e.target.value)}
-                  className="w-28 border border-gray-300 rounded-lg px-2 py-2 text-xs"
-                />
+                <select
+                  value={r.categoryTempId ?? ''}
+                  onChange={(e) => updateItemRow(idx, 'categoryTempId', e.target.value || null)}
+                  className="w-28 border border-gray-300 rounded-lg px-1 py-2 text-xs"
+                >
+                  <option value="">Sin categoría</option>
+                  {draftOptions.map((o) => (
+                    <option key={o.tempId} value={o.tempId}>{o.label}</option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   placeholder={`Item ${idx + 1}`}
@@ -256,7 +422,7 @@ export default function MeetingDetail() {
 
           <div className="flex gap-2">
             <button
-              onClick={() => setShowForm(false)}
+              onClick={resetForm}
               className="flex-1 border border-red-900 text-red-900 rounded-lg py-2.5 text-sm"
             >
               Cancelar
@@ -307,8 +473,163 @@ export default function MeetingDetail() {
   )
 }
 
+function ItemRowView(props: {
+  item: MeetingItem
+  taskById: Record<string, TaskScore>
+  convertingItemId: string | null
+  onOpenConvert: (item: MeetingItem) => void
+  onCancelConvert: () => void
+  onConfirmConvert: (item: MeetingItem) => void
+  onToggleDone: (item: MeetingItem) => void
+  onUnlink: (item: MeetingItem) => void
+  projects: { id: string; name: string }[]
+  people: { id: string; name: string }[]
+  statuses: { id: number; label: string }[]
+  priorities: { id: number; label: string }[]
+  convProject: string
+  setConvProject: (v: string) => void
+  convResponsible: string
+  setConvResponsible: (v: string) => void
+  convStatus: number
+  setConvStatus: (v: number) => void
+  convPriority: number
+  setConvPriority: (v: number) => void
+}) {
+  const { item, taskById } = props
+  const task = item.task_id ? taskById[item.task_id] : null
+
+  if (task) {
+    return (
+      <div>
+        <Link
+          to={`/task/${task.id}`}
+          className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2"
+        >
+          <span className="text-sm text-gray-800 truncate">{item.content}</span>
+          <span className="text-xs bg-gray-800 text-white rounded-full px-2 py-0.5 shrink-0">
+            {task.status_label}
+          </span>
+        </Link>
+        <button onClick={() => props.onUnlink(item)} className="text-xs text-gray-400 mt-1 ml-1">
+          Desvincular
+        </button>
+      </div>
+    )
+  }
+
+  if (props.convertingItemId === item.id) {
+    return (
+      <div className="border border-gray-200 rounded-lg p-2 space-y-2">
+        <p className="text-sm text-gray-800">{item.content}</p>
+        <select
+          value={props.convProject}
+          onChange={(e) => props.setConvProject(e.target.value)}
+          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+        >
+          <option value="">Proyecto *</option>
+          {props.projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        <select
+          value={props.convResponsible}
+          onChange={(e) => props.setConvResponsible(e.target.value)}
+          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+        >
+          <option value="">Responsable *</option>
+          {props.people.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        <div className="grid grid-cols-2 gap-2">
+          <select
+            value={props.convPriority}
+            onChange={(e) => props.setConvPriority(Number(e.target.value))}
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+          >
+            {props.priorities.map((p) => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
+          </select>
+          <select
+            value={props.convStatus}
+            onChange={(e) => props.setConvStatus(Number(e.target.value))}
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+          >
+            {props.statuses.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={props.onCancelConvert} className="flex-1 border border-gray-300 rounded-lg py-1.5 text-xs">
+            Cancelar
+          </button>
+          <button
+            onClick={() => props.onConfirmConvert(item)}
+            className="flex-1 bg-gray-900 text-white rounded-lg py-1.5 text-xs"
+          >
+            Sincronizar con To Do
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={item.is_done}
+        onChange={() => props.onToggleDone(item)}
+        className="w-4 h-4 shrink-0"
+      />
+      <span className={`text-sm flex-1 ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+        {item.content}
+      </span>
+      <button onClick={() => props.onOpenConvert(item)} className="text-xs text-blue-600 shrink-0">
+        Sincronizar
+      </button>
+    </div>
+  )
+}
+
+function CategoryBlock(props: {
+  node: CategoryNode
+  depth: number
+  itemsByCategory: Record<string, MeetingItem[]>
+  itemProps: Omit<Parameters<typeof ItemRowView>[0], 'item'>
+}) {
+  const items = props.itemsByCategory[props.node.id] ?? []
+  return (
+    <div className={props.depth > 0 ? 'ml-4 space-y-1.5' : 'space-y-1.5'}>
+      <p
+        className={
+          props.depth === 0
+            ? 'text-xs font-semibold text-gray-500 uppercase tracking-wide'
+            : 'text-xs font-medium text-gray-400'
+        }
+      >
+        {props.depth > 0 ? '— ' : ''}{props.node.name}
+      </p>
+      {items.map((item) => (
+        <ItemRowView key={item.id} item={item} {...props.itemProps} />
+      ))}
+      {props.node.children.map((child) => (
+        <CategoryBlock
+          key={child.id}
+          node={child}
+          depth={props.depth + 1}
+          itemsByCategory={props.itemsByCategory}
+          itemProps={props.itemProps}
+        />
+      ))}
+    </div>
+  )
+}
+
 function MinuteCard(props: {
-  minute: MinuteWithItems
+  minute: MinuteWithData
   taskById: Record<string, TaskScore>
   onDeleteMinute: (id: string) => void
   onToggleDone: (item: MeetingItem) => void
@@ -330,21 +651,43 @@ function MinuteCard(props: {
   convPriority: number
   setConvPriority: (v: number) => void
 }) {
-  const { minute: m, taskById } = props
+  const { minute: m } = props
 
-  const groups = useMemo(() => {
-    const order: string[] = []
+  const tree = useMemo(() => buildTree(m.categories), [m.categories])
+
+  const itemsByCategory = useMemo(() => {
     const map: Record<string, MeetingItem[]> = {}
     for (const item of m.items) {
-      const key = item.group_label ?? 'General'
-      if (!map[key]) {
-        map[key] = []
-        order.push(key)
-      }
+      const key = item.category_id ?? '__none__'
+      map[key] = map[key] ?? []
       map[key].push(item)
     }
-    return order.map((key) => ({ key, items: map[key] }))
+    return map
   }, [m.items])
+
+  const uncategorized = itemsByCategory['__none__'] ?? []
+
+  const itemProps = {
+    taskById: props.taskById,
+    convertingItemId: props.convertingItemId,
+    onOpenConvert: props.onOpenConvert,
+    onCancelConvert: props.onCancelConvert,
+    onConfirmConvert: props.onConfirmConvert,
+    onToggleDone: props.onToggleDone,
+    onUnlink: props.onUnlink,
+    projects: props.projects,
+    people: props.people,
+    statuses: props.statuses,
+    priorities: props.priorities,
+    convProject: props.convProject,
+    setConvProject: props.setConvProject,
+    convResponsible: props.convResponsible,
+    setConvResponsible: props.setConvResponsible,
+    convStatus: props.convStatus,
+    setConvStatus: props.setConvStatus,
+    convPriority: props.convPriority,
+    setConvPriority: props.setConvPriority,
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
@@ -374,121 +717,18 @@ function MinuteCard(props: {
         </div>
       )}
 
-      {groups.length > 0 && (
+      {(tree.length > 0 || uncategorized.length > 0) && (
         <div className="space-y-4 pt-2 border-t border-gray-100">
-          {groups.map((g) => (
-            <div key={g.key} className="space-y-1.5">
-              {g.key !== 'General' && (
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{g.key}</p>
-              )}
-              {g.items.map((item) => {
-                const task = item.task_id ? taskById[item.task_id] : null
-                return (
-                  <div key={item.id}>
-                    {task ? (
-                      <Link
-                        to={`/task/${task.id}`}
-                        className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2"
-                      >
-                        <span className="text-sm text-gray-800 truncate">{item.content}</span>
-                        <span className="text-xs bg-gray-800 text-white rounded-full px-2 py-0.5 shrink-0">
-                          {task.status_label}
-                        </span>
-                      </Link>
-                    ) : props.convertingItemId === item.id ? (
-                      <div className="border border-gray-200 rounded-lg p-2 space-y-2">
-                        <p className="text-sm text-gray-800">{item.content}</p>
-                        <select
-                          value={props.convProject}
-                          onChange={(e) => props.setConvProject(e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
-                        >
-                          <option value="">Proyecto *</option>
-                          {props.projects.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={props.convResponsible}
-                          onChange={(e) => props.setConvResponsible(e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
-                        >
-                          <option value="">Responsable *</option>
-                          {props.people.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                        <div className="grid grid-cols-2 gap-2">
-                          <select
-                            value={props.convPriority}
-                            onChange={(e) => props.setConvPriority(Number(e.target.value))}
-                            className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
-                          >
-                            {props.priorities.map((p) => (
-                              <option key={p.id} value={p.id}>{p.label}</option>
-                            ))}
-                          </select>
-                          <select
-                            value={props.convStatus}
-                            onChange={(e) => props.setConvStatus(Number(e.target.value))}
-                            className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
-                          >
-                            {props.statuses.map((s) => (
-                              <option key={s.id} value={s.id}>{s.label}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={props.onCancelConvert}
-                            className="flex-1 border border-gray-300 rounded-lg py-1.5 text-xs"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            onClick={() => props.onConfirmConvert(item)}
-                            className="flex-1 bg-gray-900 text-white rounded-lg py-1.5 text-xs"
-                          >
-                            Sincronizar con To Do
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={item.is_done}
-                          onChange={() => props.onToggleDone(item)}
-                          className="w-4 h-4 shrink-0"
-                        />
-                        <span
-                          className={`text-sm flex-1 ${
-                            item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'
-                          }`}
-                        >
-                          {item.content}
-                        </span>
-                        <button
-                          onClick={() => props.onOpenConvert(item)}
-                          className="text-xs text-blue-600 shrink-0"
-                        >
-                          Sincronizar
-                        </button>
-                      </div>
-                    )}
-                    {task && (
-                      <button
-                        onClick={() => props.onUnlink(item)}
-                        className="text-xs text-gray-400 mt-1 ml-1"
-                      >
-                        Desvincular
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+          {tree.map((node) => (
+            <CategoryBlock key={node.id} node={node} depth={0} itemsByCategory={itemsByCategory} itemProps={itemProps} />
           ))}
+          {uncategorized.length > 0 && (
+            <div className="space-y-1.5">
+              {uncategorized.map((item) => (
+                <ItemRowView key={item.id} item={item} {...itemProps} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -108,12 +108,21 @@ export type MeetingMinute = {
   created_at: string
 }
 
+export type MeetingCategory = {
+  id: string
+  meeting_minute_id: string
+  parent_id: string | null
+  name: string
+  sort_order: number
+}
+
 export type MeetingItem = {
   id: string
   meeting_minute_id: string
   content: string
   task_id: string | null
   group_label: string | null
+  category_id: string | null
   is_done: boolean
   sort_order: number
   created_at: string
