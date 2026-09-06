@@ -18,7 +18,7 @@ import type { Meeting, MeetingMinute, MeetingItem, MeetingCategory, TaskScore } 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
 type CategoryDraft = { tempId: string; name: string; parentTempId: string | null }
-type ItemRow = { content: string; categoryTempId: string | null }
+type ItemRow = { content: string; comment: string; categoryTempId: string | null }
 type MinuteWithData = MeetingMinute & { items: MeetingItem[]; categories: MeetingCategory[] }
 type CategoryNode = MeetingCategory & { children: CategoryNode[] }
 
@@ -59,7 +59,7 @@ export default function MeetingDetail() {
   const [attendees, setAttendees] = useState('')
   const [minutaText, setMinutaText] = useState('')
   const [acuerdos, setAcuerdos] = useState('')
-  const [itemRows, setItemRows] = useState<ItemRow[]>([{ content: '', categoryTempId: null }])
+  const [itemRows, setItemRows] = useState<ItemRow[]>([{ content: '', comment: '', categoryTempId: null }])
   const [saving, setSaving] = useState(false)
 
   const [categoryDrafts, setCategoryDrafts] = useState<CategoryDraft[]>([])
@@ -118,6 +118,29 @@ export default function MeetingDetail() {
       }
     }
 
+    if (taskIds.length > 0) {
+      const { data: tasks } = await supabase.from('task_scores').select('*').in('id', taskIds)
+      const map: Record<string, TaskScore> = {}
+      for (const t of (tasks as TaskScore[]) ?? []) map[t.id] = t
+      setTaskById(map)
+
+      // When an item is synchronized with the main To Do, keep its comment
+      // synchronized with the task comment whenever the task has one.
+      for (const [minuteId, items] of Object.entries(itemsByMinute)) {
+        for (const item of items) {
+          if (!item.task_id) continue
+          const task = map[item.task_id]
+          if (task?.comment && task.comment !== item.comment) {
+            await supabase.from('meeting_items').update({ comment: task.comment }).eq('id', item.id)
+            item.comment = task.comment
+          }
+          itemsByMinute[minuteId] = items
+        }
+      }
+    } else {
+      setTaskById({})
+    }
+
     setMinutes(
       minuteRows.map((r) => ({
         ...r,
@@ -125,15 +148,6 @@ export default function MeetingDetail() {
         categories: categoriesByMinute[r.id] ?? [],
       }))
     )
-
-    if (taskIds.length > 0) {
-      const { data: tasks } = await supabase.from('task_scores').select('*').in('id', taskIds)
-      const map: Record<string, TaskScore> = {}
-      for (const t of (tasks as TaskScore[]) ?? []) map[t.id] = t
-      setTaskById(map)
-    } else {
-      setTaskById({})
-    }
 
     setLoading(false)
   }
@@ -188,7 +202,7 @@ export default function MeetingDetail() {
   const updateItemRow = (idx: number, field: keyof ItemRow, value: string | null) => {
     setItemRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r)))
   }
-  const addItemRow = () => setItemRows((prev) => [...prev, { content: '', categoryTempId: null }])
+  const addItemRow = () => setItemRows((prev) => [...prev, { content: '', comment: '', categoryTempId: null }])
   const removeItemRow = (idx: number) => setItemRows((prev) => prev.filter((_, i) => i !== idx))
 
   const resetForm = () => {
@@ -196,7 +210,7 @@ export default function MeetingDetail() {
     setAttendees('')
     setMinutaText('')
     setAcuerdos('')
-    setItemRows([{ content: '', categoryTempId: null }])
+    setItemRows([{ content: '', comment: '', categoryTempId: null }])
     setCategoryDrafts([])
     setShowForm(false)
   }
@@ -253,6 +267,7 @@ export default function MeetingDetail() {
         validItems.map((r, idx) => ({
           meeting_minute_id: minute.id,
           content: r.content.trim(),
+          comment: r.comment.trim() || null,
           category_id: r.categoryTempId ? tempToReal[r.categoryTempId] ?? null : null,
           sort_order: idx,
         }))
@@ -272,6 +287,32 @@ export default function MeetingDetail() {
 
   const toggleDone = async (item: MeetingItem) => {
     await supabase.from('meeting_items').update({ is_done: !item.is_done }).eq('id', item.id)
+    load()
+  }
+
+  const saveItemComment = async (item: MeetingItem, comment: string) => {
+    const cleanComment = comment.trim() || null
+    const { error } = await supabase
+      .from('meeting_items')
+      .update({ comment: cleanComment })
+      .eq('id', item.id)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    if (item.task_id) {
+      const { error: taskError } = await supabase
+        .from('tasks')
+        .update({ comment: cleanComment })
+        .eq('id', item.task_id)
+      if (taskError) {
+        alert(taskError.message)
+        return
+      }
+    }
+
     load()
   }
 
@@ -311,6 +352,7 @@ export default function MeetingDetail() {
         responsible_id: convResponsible,
         status_id: convStatus,
         priority_id: convPriority,
+        comment: item.comment?.trim() || null,
       })
       .select()
       .single()
@@ -445,27 +487,36 @@ export default function MeetingDetail() {
           <div className="space-y-2 pt-2 border-t border-gray-100">
             <p className="text-xs text-gray-500">Items</p>
             {itemRows.map((r, idx) => (
-              <div key={idx} className="flex gap-2">
-                <select
-                  value={r.categoryTempId ?? ''}
-                  onChange={(e) => updateItemRow(idx, 'categoryTempId', e.target.value || null)}
-                  className="w-28 border border-gray-300 rounded-lg px-1 py-2 text-xs"
-                >
-                  <option value="">Sin categoría</option>
-                  {draftOptions.map((o) => (
-                    <option key={o.tempId} value={o.tempId}>{o.label}</option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder={`Item ${idx + 1}`}
-                  value={r.content}
-                  onChange={(e) => updateItemRow(idx, 'content', e.target.value)}
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              <div key={idx} className="border border-gray-100 rounded-lg p-2 space-y-2">
+                <div className="flex gap-2">
+                  <select
+                    value={r.categoryTempId ?? ''}
+                    onChange={(e) => updateItemRow(idx, 'categoryTempId', e.target.value || null)}
+                    className="w-28 border border-gray-300 rounded-lg px-1 py-2 text-xs"
+                  >
+                    <option value="">Sin categoría</option>
+                    {draftOptions.map((o) => (
+                      <option key={o.tempId} value={o.tempId}>{o.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    placeholder={`Item ${idx + 1}`}
+                    value={r.content}
+                    onChange={(e) => updateItemRow(idx, 'content', e.target.value)}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                  {itemRows.length > 1 && (
+                    <button onClick={() => removeItemRow(idx)} className="text-gray-400 px-2">✕</button>
+                  )}
+                </div>
+                <textarea
+                  placeholder="Comentario (opcional)"
+                  value={r.comment}
+                  onChange={(e) => updateItemRow(idx, 'comment', e.target.value)}
+                  className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-700 placeholder:text-purple-300"
+                  rows={2}
                 />
-                {itemRows.length > 1 && (
-                  <button onClick={() => removeItemRow(idx)} className="text-gray-400 px-2">✕</button>
-                )}
               </div>
             ))}
             <button onClick={addItemRow} className="text-xs text-blue-600">+ Agregar item</button>
@@ -501,6 +552,7 @@ export default function MeetingDetail() {
             onDeleteMinute={handleDeleteMinute}
             onToggleDone={toggleDone}
             onUnlink={unlinkItem}
+            onSaveComment={saveItemComment}
             convertingItemId={convertingItemId}
             onOpenConvert={openConvert}
             onCancelConvert={() => setConvertingItemId(null)}
@@ -540,6 +592,7 @@ function ItemRowView(props: {
   onConfirmConvert: (item: MeetingItem) => void
   onToggleDone: (item: MeetingItem) => void
   onUnlink: (item: MeetingItem) => void
+  onSaveComment: (item: MeetingItem, comment: string) => void
   projects: { id: string; name: string }[]
   people: { id: string; name: string }[]
   statuses: { id: number; label: string }[]
@@ -555,6 +608,19 @@ function ItemRowView(props: {
 }) {
   const { item, taskById } = props
   const task = item.task_id ? taskById[item.task_id] : null
+  const [editingComment, setEditingComment] = useState(false)
+  const [commentDraft, setCommentDraft] = useState(item.comment ?? task?.comment ?? '')
+
+  useEffect(() => {
+    setCommentDraft(item.comment ?? task?.comment ?? '')
+  }, [item.comment, task?.comment])
+
+  const saveComment = () => {
+    props.onSaveComment(item, commentDraft)
+    setEditingComment(false)
+  }
+
+  const displayedComment = item.comment ?? task?.comment ?? null
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -577,6 +643,52 @@ function ItemRowView(props: {
     </button>
   )
 
+  const commentEditor = (
+    <div className="ml-7 mt-1 mb-1">
+      {editingComment ? (
+        <div className="space-y-1.5">
+          <textarea
+            value={commentDraft}
+            onChange={(e) => setCommentDraft(e.target.value)}
+            placeholder="Comentario..."
+            className="w-full border border-purple-200 rounded-lg px-2.5 py-2 text-sm text-purple-700 placeholder:text-purple-300"
+            rows={2}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button onClick={saveComment} className="text-xs text-green-600">Guardar</button>
+            <button
+              onClick={() => {
+                setCommentDraft(displayedComment ?? '')
+                setEditingComment(false)
+              }}
+              className="text-xs text-gray-400"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : displayedComment ? (
+        <button
+          type="button"
+          onClick={() => setEditingComment(true)}
+          className="text-left text-xs text-purple-700 whitespace-pre-wrap hover:text-purple-900"
+          title="Editar comentario"
+        >
+          {displayedComment}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditingComment(true)}
+          className="text-xs text-purple-500 hover:text-purple-700"
+        >
+          + Agregar comentario
+        </button>
+      )}
+    </div>
+  )
+
   if (task) {
     return (
       <div ref={setNodeRef} style={dragStyle} className={isDragging ? 'opacity-60' : ''}>
@@ -592,7 +704,8 @@ function ItemRowView(props: {
             </span>
           </Link>
         </div>
-        <button onClick={() => props.onUnlink(item)} className="text-xs text-gray-400 mt-1 ml-1">
+        {commentEditor}
+        <button onClick={() => props.onUnlink(item)} className="text-xs text-gray-400 mt-1 ml-7">
           Desvincular
         </button>
       </div>
@@ -603,6 +716,7 @@ function ItemRowView(props: {
     return (
       <div ref={setNodeRef} style={dragStyle} className="border border-gray-200 rounded-lg p-2 space-y-2">
         <p className="text-sm text-gray-800">{item.content}</p>
+        {commentEditor}
         <select
           value={props.convProject}
           onChange={(e) => props.setConvProject(e.target.value)}
@@ -690,6 +804,7 @@ function ItemRowView(props: {
           Me deben
         </button>
       </div>
+      {commentEditor}
     </div>
   )
 }
@@ -778,6 +893,7 @@ function MinuteCard(props: {
   onDeleteMinute: (id: string) => void
   onToggleDone: (item: MeetingItem) => void
   onUnlink: (item: MeetingItem) => void
+  onSaveComment: (item: MeetingItem, comment: string) => void
   convertingItemId: string | null
   onOpenConvert: (item: MeetingItem, presetStatus?: number) => void
   onCancelConvert: () => void
@@ -874,7 +990,7 @@ function MinuteCard(props: {
       const sourceCategoryId = sourceCatKey === '__none__' ? null : sourceCatKey
       newSourceArr.forEach((it, i) => updates.push({ id: it.id, category_id: sourceCategoryId, sort_order: i }))
       targetArr.forEach((it, i) =>
-        updates.push({ id: it.id, category_id: it.id === activeId ? newCategoryId : newCategoryId, sort_order: i })
+        updates.push({ id: it.id, category_id: newCategoryId, sort_order: i })
       )
     }
 
@@ -903,6 +1019,7 @@ function MinuteCard(props: {
     onConfirmConvert: props.onConfirmConvert,
     onToggleDone: props.onToggleDone,
     onUnlink: props.onUnlink,
+    onSaveComment: props.onSaveComment,
     projects: props.projects,
     people: props.people,
     statuses: props.statuses,
