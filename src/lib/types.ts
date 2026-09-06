@@ -120,6 +120,7 @@ export type MeetingItem = {
   id: string
   meeting_minute_id: string
   content: string
+  comment: string | null
   task_id: string | null
   group_label: string | null
   category_id: string | null
