@@ -9,8 +9,9 @@ import FreedTasksModal from '../components/FreedTasksModal'
 
 const ME_DEBEN_STATUS_IDS = [3, 5] // Me deben, Recurrente
 const REVISAR_STATUS_ID = 4
+const LARGO_PLAZO_STATUS_ID = 9
 
-type Bucket = 'none' | 'meDeben' | 'revision'
+type Bucket = 'none' | 'meDeben' | 'revision' | 'largoPlazo'
 type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 
 export default function Dashboard() {
@@ -97,8 +98,14 @@ export default function Dashboard() {
         if (!ME_DEBEN_STATUS_IDS.includes(t.status_id)) return false
       } else if (bucket === 'revision') {
         if (t.status_id !== REVISAR_STATUS_ID) return false
+      } else if (bucket === 'largoPlazo') {
+        if (t.status_id !== LARGO_PLAZO_STATUS_ID) return false
       } else {
-        if (ME_DEBEN_STATUS_IDS.includes(t.status_id) || t.status_id === REVISAR_STATUS_ID) return false
+        if (
+          ME_DEBEN_STATUS_IDS.includes(t.status_id) ||
+          t.status_id === REVISAR_STATUS_ID ||
+          t.status_id === LARGO_PLAZO_STATUS_ID
+        ) return false
       }
 
       if (projectFilter && t.project_id !== projectFilter) return false
@@ -183,6 +190,8 @@ export default function Dashboard() {
       ? 'Nadie te debe nada por ahora.'
       : bucket === 'revision'
       ? 'Nada pendiente de revisión.'
+      : bucket === 'largoPlazo'
+      ? 'Nada a largo plazo por ahora.'
       : 'Nada por aquí.'
 
   return (
@@ -232,6 +241,16 @@ export default function Dashboard() {
           }`}
         >
           Me deben
+        </button>
+        <button
+          onClick={() => toggleBucket('largoPlazo')}
+          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+            bucket === 'largoPlazo'
+              ? 'bg-gray-300 text-gray-700 border-gray-400'
+              : 'bg-white text-gray-500 border-gray-300'
+          }`}
+        >
+          Largo Plazo
         </button>
       </div>
 
