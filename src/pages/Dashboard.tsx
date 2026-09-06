@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { Person, TaskScore } from '../lib/types'
-import PriorityBadge from '../components/PriorityBadge'
+import { PRIORITY_COLORS } from '../lib/types'
 import { getFreedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
 
@@ -16,7 +16,7 @@ type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { projects, people, statuses } = useLookups()
+  const { projects, people, statuses, priorities } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -84,6 +84,12 @@ export default function Dashboard() {
       await supabase.from('task_dependencies').update({ resolved_at: null }).eq('depends_on_task_id', taskId)
     }
 
+    load()
+  }
+
+  const updatePriority = async (taskId: string, newPriorityId: number) => {
+    const { error } = await supabase.from('tasks').update({ priority_id: newPriorityId }).eq('id', taskId)
+    if (error) return alert(error.message)
     load()
   }
 
@@ -333,7 +339,15 @@ export default function Dashboard() {
                       <option key={s.id} value={s.id}>{s.label}</option>
                     ))}
                   </select>
-                  <PriorityBadge id={t.priority_id} label={t.priority_label} />
+                  <select
+                    value={t.priority_id}
+                    onChange={(e) => updatePriority(t.id, Number(e.target.value))}
+                    className={`text-xs text-white font-medium rounded-full pl-2 pr-1 py-0.5 border-0 appearance-none ${PRIORITY_COLORS[t.priority_id] ?? 'bg-gray-400'}`}
+                  >
+                    {priorities.map((p) => (
+                      <option key={p.id} value={p.id}>{p.label}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
