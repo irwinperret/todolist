@@ -44,7 +44,26 @@ export default function Dashboard() {
   const updateStatus = async (taskId: string, newStatusId: number) => {
     const payload: { status_id: number; resolved_at?: string } =
       newStatusId === 8 ? { status_id: 8, resolved_at: new Date().toISOString() } : { status_id: newStatusId }
-    await supabase.from('tasks').update(payload).eq('id', taskId)
+
+    const { error } = await supabase.from('tasks').update(payload).eq('id', taskId)
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    // A task shown in the main To Do can also be linked to one or more
+    // meeting-minute items. Keep the minute checkbox synchronized with the
+    // task's completion state when the status is changed here.
+    const { error: meetingItemsError } = await supabase
+      .from('meeting_items')
+      .update({ is_done: newStatusId === 8 })
+      .eq('task_id', taskId)
+
+    if (meetingItemsError) {
+      alert(meetingItemsError.message)
+      return
+    }
+
     load()
   }
 
