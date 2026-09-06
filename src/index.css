@@ -7,3 +7,33 @@
 body {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Meeting item comments: the add action stays on the item row, while
+   saved/edited comments occupy their own indented line underneath. */
+.ml-7.mt-1.mb-1:has(> button:only-child):not(:has(button[title="Editar comentario"])) {
+  margin-left: auto;
+  margin-top: 0;
+  margin-bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.ml-7.mt-1.mb-1:has(> button:only-child):not(:has(button[title="Editar comentario"])) > button {
+  font-size: 0;
+}
+
+.ml-7.mt-1.mb-1:has(> button:only-child):not(:has(button[title="Editar comentario"])) > button::after {
+  content: "+ Comentario";
+  font-size: 0.75rem;
+}
+
+.ml-7.mt-1.mb-1:has(button[title="Editar comentario"]),
+.ml-7.mt-1.mb-1:has(textarea) {
+  flex-basis: 100%;
+  margin-left: 1.75rem;
+}
+
+.ml-7.mt-1.mb-1:has(button[title="Editar comentario"]) > button {
+  display: block;
+}
