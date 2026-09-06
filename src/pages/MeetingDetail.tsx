@@ -773,7 +773,7 @@ function ItemRowView(props: {
   }
 
   return (
-    <div ref={setNodeRef} style={dragStyle} className={`flex items-center gap-2 flex-wrap ${isDragging ? 'opacity-60' : ''}`}>
+    <div ref={setNodeRef} style={dragStyle} className={`flex items-center gap-2 ${isDragging ? 'opacity-60' : ''}`}>
       {grip}
       <input
         type="checkbox"
@@ -781,7 +781,7 @@ function ItemRowView(props: {
         onChange={() => props.onToggleDone(item)}
         className="w-4 h-4 shrink-0"
       />
-      <span className={`text-sm flex-1 min-w-[100px] ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+      <span className={`text-sm flex-1 min-w-0 truncate ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
         {item.content}
       </span>
       <div className="flex gap-1 shrink-0">
