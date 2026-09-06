@@ -75,6 +75,12 @@ export type TaskDependency = {
   depends_on_task_id: string
 }
 
+export type TaskLite = {
+  id: string
+  title: string
+  status_id: number
+}
+
 export const PRIORITY_COLORS: Record<number, string> = {
   1: 'bg-red-500',
   2: 'bg-orange-500',

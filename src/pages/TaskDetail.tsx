@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
-import type { TaskFollowup, TaskPhoto, TaskScore } from '../lib/types'
+import type { TaskFollowup, TaskPhoto, TaskScore, TaskLite } from '../lib/types'
 
 export default function TaskDetail() {
   const { id } = useParams()
@@ -34,6 +34,12 @@ export default function TaskDetail() {
   const [resolutionPrompt, setResolutionPrompt] = useState(false)
   const [resolutionText, setResolutionText] = useState('')
 
+  const [dependsOn, setDependsOn] = useState<TaskLite[]>([])
+  const [blocks, setBlocks] = useState<TaskLite[]>([])
+  const [depSearch, setDepSearch] = useState('')
+  const [depResults, setDepResults] = useState<TaskLite[]>([])
+  const [depSearching, setDepSearching] = useState(false)
+
   const load = async () => {
     if (isNew) return
     const { data } = await supabase.from('task_scores').select('*').eq('id', id).single()
@@ -52,6 +58,26 @@ export default function TaskDetail() {
       .eq('task_id', id)
       .order('uploaded_at', { ascending: false })
     setPhotos((ph as TaskPhoto[]) ?? [])
+
+    const { data: dependsOnRows } = await supabase
+      .from('task_dependencies')
+      .select('depends_on_task_id, tasks:depends_on_task_id(id, title, status_id)')
+      .eq('task_id', id)
+    setDependsOn(
+      ((dependsOnRows as any[]) ?? [])
+        .map((r) => r.tasks)
+        .filter(Boolean) as TaskLite[]
+    )
+
+    const { data: blocksRows } = await supabase
+      .from('task_dependencies')
+      .select('task_id, tasks:task_id(id, title, status_id)')
+      .eq('depends_on_task_id', id)
+    setBlocks(
+      ((blocksRows as any[]) ?? [])
+        .map((r) => r.tasks)
+        .filter(Boolean) as TaskLite[]
+    )
   }
 
   useEffect(() => {
@@ -152,6 +178,45 @@ export default function TaskDetail() {
   const handleArchiveToggle = async () => {
     await supabase.from('tasks').update({ archived: !task.archived }).eq('id', id)
     navigate('/')
+  }
+
+  const searchDependencyCandidates = async (q: string) => {
+    setDepSearch(q)
+    if (!q.trim()) {
+      setDepResults([])
+      return
+    }
+    setDepSearching(true)
+    const excludeIds = new Set([id, ...dependsOn.map((t) => t.id)])
+    const { data } = await supabase
+      .from('tasks')
+      .select('id, title, status_id')
+      .ilike('title', `%${q.trim()}%`)
+      .eq('archived', false)
+      .limit(10)
+    setDepResults(((data as TaskLite[]) ?? []).filter((t) => !excludeIds.has(t.id)))
+    setDepSearching(false)
+  }
+
+  const addDependency = async (dependsOnTaskId: string) => {
+    if (isNew) return
+    const { error } = await supabase
+      .from('task_dependencies')
+      .insert({ task_id: id, depends_on_task_id: dependsOnTaskId })
+    if (!error) {
+      setDepSearch('')
+      setDepResults([])
+      load()
+    }
+  }
+
+  const removeDependency = async (dependsOnTaskId: string) => {
+    await supabase
+      .from('task_dependencies')
+      .delete()
+      .eq('task_id', id)
+      .eq('depends_on_task_id', dependsOnTaskId)
+    load()
   }
 
   return (
@@ -333,6 +398,66 @@ export default function TaskDetail() {
               ))}
               {followups.length === 0 && <p className="text-sm text-gray-400">Sin notas todavía.</p>}
             </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+            <p className="font-medium text-gray-900">Dependencias</p>
+
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Esta tarea depende de:</p>
+              {dependsOn.length === 0 && <p className="text-sm text-gray-400">Ninguna</p>}
+              <div className="space-y-1">
+                {dependsOn.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between text-sm border-l-2 border-orange-300 pl-2 py-1">
+                    <Link to={`/task/${t.id}`} className="text-gray-800 truncate">{t.title}</Link>
+                    <button onClick={() => removeDependency(t.id)} className="text-xs text-gray-400 shrink-0 ml-2">
+                      Quitar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Buscar tarea para agregar como dependencia..."
+                value={depSearch}
+                onChange={(e) => searchDependencyCandidates(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              {depSearching && <p className="text-xs text-gray-400 mt-1">Buscando...</p>}
+              {depResults.length > 0 && (
+                <div className="border border-gray-200 rounded-lg mt-1 divide-y divide-gray-100 bg-white">
+                  {depResults.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => addDependency(t.id)}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      {t.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {blocks.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Esta tarea bloquea a:</p>
+                <div className="space-y-1">
+                  {blocks.map((t) => (
+                    <Link
+                      key={t.id}
+                      to={`/task/${t.id}`}
+                      className="block text-sm border-l-2 border-red-300 pl-2 py-1 text-gray-800 truncate"
+                    >
+                      {t.title}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2">

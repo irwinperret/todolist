@@ -157,6 +157,14 @@ export default function Dashboard() {
                   <span>vence {new Date(t.due_date).toLocaleDateString()}</span>
                 </>
               )}
+              {t.blocking_count > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="text-red-500 font-medium">
+                    bloquea {t.blocking_count} {t.blocking_count === 1 ? 'tarea' : 'tareas'}
+                  </span>
+                </>
+              )}
             </div>
           </Link>
         ))}
