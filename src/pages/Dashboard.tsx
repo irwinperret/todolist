@@ -107,16 +107,6 @@ export default function Dashboard() {
           IPA
         </button>
         <button
-          onClick={() => toggleBucket('meDeben')}
-          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
-            bucket === 'meDeben'
-              ? 'bg-[#e8ddd3] text-red-900 border-[#d8c7b5]'
-              : 'bg-white text-red-800 border-gray-300'
-          }`}
-        >
-          Me deben
-        </button>
-        <button
           onClick={() => toggleBucket('revision')}
           className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
             bucket === 'revision'
@@ -125,6 +115,16 @@ export default function Dashboard() {
           }`}
         >
           Pendiente Revisión
+        </button>
+        <button
+          onClick={() => toggleBucket('meDeben')}
+          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+            bucket === 'meDeben'
+              ? 'bg-[#e8ddd3] text-red-900 border-[#d8c7b5]'
+              : 'bg-white text-red-800 border-gray-300'
+          }`}
+        >
+          Me deben
         </button>
       </div>
 
