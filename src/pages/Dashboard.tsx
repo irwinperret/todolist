@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { Person, TaskScore } from '../lib/types'
@@ -15,6 +15,7 @@ type Bucket = 'none' | 'meDeben' | 'revision' | 'largoPlazo'
 type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const { projects, people, statuses } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
@@ -23,6 +24,7 @@ export default function Dashboard() {
   const [search, setSearch] = useState('')
   const [contactPerson, setContactPerson] = useState<Person | null>(null)
   const [freedTasks, setFreedTasks] = useState<FreedTask[] | null>(null)
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
 
   const [projectFilter, setProjectFilter] = useState('')
   const [personFilter, setPersonFilter] = useState('')
@@ -297,13 +299,18 @@ export default function Dashboard() {
       <div className="space-y-2">
         {filtered.map((t) => {
           const person = personForTask(t.responsible_id)
+          const indirectPerson = personForTask(t.indirect_id)
           const hasContact = Boolean(person?.email || person?.phone)
+          const isExpanded = expandedTaskId === t.id
 
           return (
-            <Link
+            <div
               key={t.id}
-              to={`/task/${t.id}`}
-              className="block bg-white border border-gray-200 rounded-xl p-3 active:bg-gray-50"
+              onClick={() => {
+                if (isExpanded) navigate(`/task/${t.id}`)
+                else setExpandedTaskId(t.id)
+              }}
+              className="block bg-white border border-gray-200 rounded-xl p-3 active:bg-gray-50 cursor-pointer"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -363,7 +370,49 @@ export default function Dashboard() {
                   </>
                 )}
               </div>
-            </Link>
+
+              {isExpanded && (
+                <div className="mt-3 pt-3 border-t border-gray-100 space-y-2 text-sm">
+                  {person && (
+                    <p>
+                      <span className="text-gray-400">Subcontratista/responsable: </span>
+                      <span className="text-gray-800">{person.name}{person.role ? ` (${person.role})` : ''}</span>
+                    </p>
+                  )}
+                  {indirectPerson && (
+                    <p>
+                      <span className="text-gray-400">Involucrado: </span>
+                      <span className="text-gray-800">{indirectPerson.name}</span>
+                    </p>
+                  )}
+                  {t.discipline && (
+                    <p><span className="text-gray-400">Disciplina: </span><span className="text-gray-800">{t.discipline}</span></p>
+                  )}
+                  {t.location && (
+                    <p><span className="text-gray-400">Ubicación: </span><span className="text-gray-800">{t.location}</span></p>
+                  )}
+                  {t.follow_up_date && (
+                    <p><span className="text-gray-400">Seguimiento: </span><span className="text-gray-800">{new Date(t.follow_up_date).toLocaleDateString()}</span></p>
+                  )}
+                  {t.comment && (
+                    <div>
+                      <p className="text-gray-400">Notas:</p>
+                      <p className="text-gray-800 whitespace-pre-wrap">{t.comment}</p>
+                    </div>
+                  )}
+                  {t.resolution_notes && (
+                    <div>
+                      <p className="text-gray-400">Resolución:</p>
+                      <p className="text-gray-800 whitespace-pre-wrap">{t.resolution_notes}</p>
+                    </div>
+                  )}
+                  {!person && !indirectPerson && !t.discipline && !t.location && !t.follow_up_date && !t.comment && !t.resolution_notes && (
+                    <p className="text-gray-400 italic">Sin más detalle agregado.</p>
+                  )}
+                  <p className="text-xs text-gray-300 pt-1">Toca de nuevo para editar</p>
+                </div>
+              )}
+            </div>
           )
         })}
       </div>
