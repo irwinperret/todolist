@@ -80,8 +80,10 @@ export default function Dashboard() {
         </button>
         <button
           onClick={() => setShowMeDeben((v) => !v)}
-          className={`flex-1 rounded-lg py-2 text-sm border ${
-            showMeDeben ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300'
+          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+            showMeDeben
+              ? 'bg-[#e8ddd3] text-red-900 border-[#d8c7b5]'
+              : 'bg-white text-red-800 border-gray-300'
           }`}
         >
           Me deben
