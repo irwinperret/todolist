@@ -926,7 +926,7 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
         {item.is_long_term && !editingText ? (
           <span
             onClick={() => setEditingText(true)}
-            className={`text-sm min-w-0 flex-1 whitespace-normal break-words cursor-text text-gray-400 ${item.is_done ? 'line-through' : ''}`}
+            className={`text-sm min-w-0 flex-1 whitespace-normal break-words cursor-text text-gray-600 ${item.is_done ? 'line-through' : ''}`}
             title="Toca para editar el texto"
           >
             {item.content}
