@@ -500,11 +500,14 @@ function MinuteCard(props: {
       map[key] = map[key] ?? []
       map[key].push(item)
     }
-    // "En el Radar" items always sink to the bottom of their category,
-    // regardless of drag order, since they're long-term/not urgent by definition
+    // Ordering within each category: normal pending items first, then
+    // checked-off items, and "En el Radar" (long-term) items always last
+    // regardless of their checked state.
+    const rank = (item: MeetingItem) => (item.is_long_term ? 2 : item.is_done ? 1 : 0)
     for (const key of Object.keys(map)) {
       map[key].sort((a, b) => {
-        if (a.is_long_term !== b.is_long_term) return a.is_long_term ? 1 : -1
+        const diff = rank(a) - rank(b)
+        if (diff !== 0) return diff
         return a.sort_order - b.sort_order
       })
     }
