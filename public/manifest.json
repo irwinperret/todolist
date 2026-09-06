@@ -1,0 +1,11 @@
+{
+  "name": "Seguimiento",
+  "short_name": "Seguimiento",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#111827",
+  "icons": [
+    { "src": "/vite.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
