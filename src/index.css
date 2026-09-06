@@ -37,3 +37,28 @@ body {
 .ml-7.mt-1.mb-1:has(button[title="Editar comentario"]) > button {
   display: block;
 }
+
+/* Keep the To Do / Revisar / Me deben buttons in the same horizontal
+   position when a comment is saved. The empty + Comentario action normally
+   occupies this space; reserve it after the comment moves below the item. */
+.flex.items-center.gap-2.flex-wrap:has(> .ml-7.mt-1.mb-1:has(button[title="Editar comentario"])) > .flex.gap-1.shrink-0,
+.flex.items-center.gap-2.flex-wrap:has(> .ml-7.mt-1.mb-1:has(textarea)) > .flex.gap-1.shrink-0 {
+  margin-right: 5.5rem;
+}
+
+/* Meeting activity names should always remain fully readable on mobile and desktop. */
+div.flex.items-center.gap-2.flex-wrap:has(> input[type="checkbox"]) > span.text-sm.flex-1 {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Linked activities were using Tailwind's truncate utility. */
+a.flex-1.flex.items-center.justify-between.gap-2.bg-gray-50.rounded-lg.px-3.py-2 > span.truncate {
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
