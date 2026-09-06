@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { TaskFollowup, TaskPhoto, TaskScore, TaskLite, TaskVoiceNote } from '../lib/types'
 
+type DependencyLite = TaskLite & { resolved_at: string | null }
+
 export default function TaskDetail() {
   const { id } = useParams()
   const isNew = id === 'new' || !id
@@ -34,8 +36,8 @@ export default function TaskDetail() {
   const [resolutionPrompt, setResolutionPrompt] = useState(false)
   const [resolutionText, setResolutionText] = useState('')
 
-  const [dependsOn, setDependsOn] = useState<TaskLite[]>([])
-  const [blocks, setBlocks] = useState<TaskLite[]>([])
+  const [dependsOn, setDependsOn] = useState<DependencyLite[]>([])
+  const [blocks, setBlocks] = useState<DependencyLite[]>([])
   const [depSearch, setDepSearch] = useState('')
   const [depResults, setDepResults] = useState<TaskLite[]>([])
   const [depSearching, setDepSearching] = useState(false)
@@ -76,22 +78,22 @@ export default function TaskDetail() {
 
     const { data: dependsOnRows } = await supabase
       .from('task_dependencies')
-      .select('depends_on_task_id, tasks:depends_on_task_id(id, title, status_id)')
+      .select('depends_on_task_id, resolved_at, tasks:depends_on_task_id(id, title, status_id)')
       .eq('task_id', taskId)
     setDependsOn(
       ((dependsOnRows as any[]) ?? [])
-        .map((r) => r.tasks)
-        .filter(Boolean) as TaskLite[]
+        .filter((r) => r.tasks)
+        .map((r) => ({ ...r.tasks, resolved_at: r.resolved_at })) as DependencyLite[]
     )
 
     const { data: blocksRows } = await supabase
       .from('task_dependencies')
-      .select('task_id, tasks:task_id(id, title, status_id)')
+      .select('task_id, resolved_at, tasks:task_id(id, title, status_id)')
       .eq('depends_on_task_id', taskId)
     setBlocks(
       ((blocksRows as any[]) ?? [])
-        .map((r) => r.tasks)
-        .filter(Boolean) as TaskLite[]
+        .filter((r) => r.tasks)
+        .map((r) => ({ ...r.tasks, resolved_at: r.resolved_at })) as DependencyLite[]
     )
 
     const { data: vn } = await supabase
@@ -303,6 +305,12 @@ export default function TaskDetail() {
     if (error) return alert(error.message)
     const meetingError = await supabase.from('meeting_items').update({ is_done: true }).eq('task_id', id)
     if (meetingError.error) return alert(meetingError.error.message)
+    // Any task that was waiting on this one can now show that prelación as resolved
+    await supabase
+      .from('task_dependencies')
+      .update({ resolved_at: new Date().toISOString() })
+      .eq('depends_on_task_id', id)
+      .is('resolved_at', null)
     setResolutionPrompt(false)
     navigate('/')
   }
@@ -312,6 +320,8 @@ export default function TaskDetail() {
     if (error) return alert(error.message)
     const { error: meetingError } = await supabase.from('meeting_items').update({ is_done: false }).eq('task_id', id)
     if (meetingError) return alert(meetingError.message)
+    // Reactivate any prelación that was marked resolved because this task used to be done
+    await supabase.from('task_dependencies').update({ resolved_at: null }).eq('depends_on_task_id', id)
     load()
   }
 
@@ -349,9 +359,15 @@ export default function TaskDetail() {
     setDepSearching(false)
   }
 
-  const addDependency = async (dependsOnTaskId: string) => {
+  const addDependency = async (dependsOnTaskId: string, dependsOnStatusId: number) => {
     if (isNew) return
-    const { error } = await supabase.from('task_dependencies').insert({ task_id: id, depends_on_task_id: dependsOnTaskId })
+    const { error } = await supabase
+      .from('task_dependencies')
+      .insert({
+        task_id: id,
+        depends_on_task_id: dependsOnTaskId,
+        resolved_at: dependsOnStatusId === 8 ? new Date().toISOString() : null,
+      })
     if (!error) { setDepSearch(''); setDepResults([]); load() }
   }
 
@@ -379,7 +395,7 @@ export default function TaskDetail() {
 
       {!isNew && <><div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Seguimiento</p><div className="flex gap-2"><input type="text" placeholder="Agregar nota..." value={newNote} onChange={(e) => setNewNote(e.target.value)} className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" /><button onClick={handleAddNote} className="bg-gray-900 text-white rounded-lg px-4 text-sm">Agregar</button></div><div className="space-y-2">{followups.map((f) => <div key={f.id} className="text-sm border-l-2 border-gray-200 pl-3"><p className="text-gray-800">{f.note}</p><p className="text-xs text-gray-400">{new Date(f.created_at).toLocaleString()}</p></div>)}{followups.length === 0 && <p className="text-sm text-gray-400">Sin notas todavía.</p>}</div></div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Dependencias</p><div><p className="text-xs text-gray-500 mb-1">Esta tarea depende de:</p>{dependsOn.length === 0 && <p className="text-sm text-gray-400">Ninguna</p>}<div className="space-y-1">{dependsOn.map((t) => <div key={t.id} className="flex items-center justify-between text-sm border-l-2 border-orange-300 pl-2 py-1"><Link to={`/task/${t.id}`} className="text-gray-800 truncate">{t.title}</Link><button onClick={() => removeDependency(t.id)} className="text-xs text-gray-400 shrink-0 ml-2">Quitar</button></div>)}</div></div><div className="relative"><input type="text" placeholder="Buscar tarea para agregar como dependencia..." value={depSearch} onChange={(e) => searchDependencyCandidates(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />{depSearching && <p className="text-xs text-gray-400 mt-1">Buscando...</p>}{depResults.length > 0 && <div className="border border-gray-200 rounded-lg mt-1 divide-y divide-gray-100 bg-white">{depResults.map((t) => <button key={t.id} onClick={() => addDependency(t.id)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">{t.title}</button>)}</div>}</div>{blocks.length > 0 && <div><p className="text-xs text-gray-500 mb-1">Esta tarea bloquea a:</p><div className="space-y-1">{blocks.map((t) => <Link key={t.id} to={`/task/${t.id}`} className="block text-sm border-l-2 border-red-300 pl-2 py-1 text-gray-800 truncate">{t.title}</Link>)}</div></div>}</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Dependencias</p><div><p className="text-xs text-gray-500 mb-1">Esta tarea depende de:</p>{dependsOn.length === 0 && <p className="text-sm text-gray-400">Ninguna</p>}<div className="space-y-1">{dependsOn.map((t) => <div key={t.id} className={`flex items-center justify-between text-sm border-l-2 pl-2 py-1 ${t.resolved_at ? 'border-green-300' : 'border-orange-300'}`}><Link to={`/task/${t.id}`} className={`truncate ${t.resolved_at ? 'text-green-700 line-through' : 'text-gray-800'}`}>{t.resolved_at ? '✓ ' : ''}{t.title}</Link><button onClick={() => removeDependency(t.id)} className="text-xs text-gray-400 shrink-0 ml-2">Quitar</button></div>)}</div></div><div className="relative"><input type="text" placeholder="Buscar tarea para agregar como dependencia..." value={depSearch} onChange={(e) => searchDependencyCandidates(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />{depSearching && <p className="text-xs text-gray-400 mt-1">Buscando...</p>}{depResults.length > 0 && <div className="border border-gray-200 rounded-lg mt-1 divide-y divide-gray-100 bg-white">{depResults.map((t) => <button key={t.id} onClick={() => addDependency(t.id, t.status_id)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">{t.title}</button>)}</div>}</div>{blocks.length > 0 && <div><p className="text-xs text-gray-500 mb-1">Esta tarea bloquea a:</p><div className="space-y-1">{blocks.map((t) => <Link key={t.id} to={`/task/${t.id}`} className={`block text-sm border-l-2 pl-2 py-1 truncate ${t.resolved_at ? 'border-green-300 text-green-700 line-through' : 'border-red-300 text-gray-800'}`}>{t.resolved_at ? '✓ ' : ''}{t.title}</Link>)}</div></div>}</div>
 
       <div className="flex gap-2">{task.status_id === 8 ? <button onClick={handleReopen} className="flex-1 border border-gray-300 rounded-lg py-3 text-sm">Reabrir</button> : <button onClick={handleComplete} className="flex-1 bg-green-600 text-white rounded-lg py-3 text-sm">Marcar completada</button>}<button onClick={handleArchiveToggle} className="flex-1 border border-gray-300 rounded-lg py-3 text-sm">{task.archived ? 'Desarchivar' : 'Archivar'}</button></div>
       <button onClick={handleDelete} className="w-full border border-red-200 text-red-600 rounded-lg py-3 text-sm">Borrar permanentemente</button></>}

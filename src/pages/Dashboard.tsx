@@ -64,6 +64,18 @@ export default function Dashboard() {
       return
     }
 
+    // Keep prelaciones in sync too: resolve them when this task is completed,
+    // reactivate them if it's reopened.
+    if (newStatusId === 8) {
+      await supabase
+        .from('task_dependencies')
+        .update({ resolved_at: new Date().toISOString() })
+        .eq('depends_on_task_id', taskId)
+        .is('resolved_at', null)
+    } else {
+      await supabase.from('task_dependencies').update({ resolved_at: null }).eq('depends_on_task_id', taskId)
+    }
+
     load()
   }
 
