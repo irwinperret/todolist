@@ -3,8 +3,8 @@ import { useAuth } from '../lib/AuthContext'
 
 const navItems = [
   { to: '/', label: 'To Do', icon: '📋' },
-  { to: '/archive', label: 'Archivo', icon: '🗄️' },
   { to: '/meetings', label: 'Reuniones', icon: '🗓️' },
+  { to: '/archive', label: 'Archivo', icon: '🗄️' },
   { to: '/lists', label: 'Listas', icon: '⚙️' },
 ]
 
