@@ -9,7 +9,6 @@ const ME_DEBEN_STATUS_IDS = [3, 5] // Me deben, Recurrente
 const REVISAR_STATUS_ID = 4
 
 type Bucket = 'none' | 'meDeben' | 'revision'
-
 type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 
 export default function Dashboard() {
@@ -80,7 +79,6 @@ export default function Dashboard() {
 
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
   const personForTask = (id: string | null) => people.find((p) => p.id === id) ?? null
-  const personName = (id: string | null) => personForTask(id)?.name ?? '—'
 
   const isDesktop = () => !/Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent)
 
