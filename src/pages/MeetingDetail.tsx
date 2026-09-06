@@ -14,7 +14,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } 
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
-import { RichText, RichTextArea, formatRichText } from '../components/RichText'
+import { RichText, RichTextArea, formatRichText, useFormatShortcuts } from '../components/RichText'
 import type { Meeting, MeetingMinute, MeetingItem, MeetingCategory, TaskScore, Project, Person, Status, PriorityLevel } from '../lib/types'
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
@@ -693,14 +693,7 @@ function MinuteCard(props: {
                 <option key={o.id} value={o.id}>{o.label}</option>
               ))}
             </select>
-            <input
-              type="text"
-              placeholder="Nuevo item"
-              value={newItemContent}
-              onChange={(e) => setNewItemContent(e.target.value)}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              autoFocus
-            />
+            <NewItemInput value={newItemContent} onChange={setNewItemContent} />
             <button
               onClick={() => {
                 const catId = newItemCategory || null
@@ -815,6 +808,22 @@ function UncategorizedZone(props: { items: MeetingItem[]; itemActions: ItemActio
   )
 }
 
+function NewItemInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { ref, onKeyDown } = useFormatShortcuts<HTMLInputElement>(value, onChange)
+  return (
+    <input
+      ref={ref}
+      type="text"
+      placeholder="Nuevo item"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={onKeyDown}
+      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+      autoFocus
+    />
+  )
+}
+
 function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemActions }) {
   const task = item.task_id ? actions.taskById[item.task_id] : null
 
@@ -826,6 +835,9 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
   const [editingText, setEditingText] = useState(false)
   const [textDraft, setTextDraft] = useState(item.content)
   useEffect(() => setTextDraft(item.content), [item.content])
+
+  const commentShortcuts = useFormatShortcuts<HTMLTextAreaElement>(commentDraft, setCommentDraft)
+  const textShortcuts = useFormatShortcuts<HTMLInputElement>(textDraft, setTextDraft)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
   const dragStyle = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : undefined, position: 'relative' as const }
@@ -841,8 +853,10 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
       {editingComment ? (
         <div className="space-y-1.5">
           <textarea
+            ref={commentShortcuts.ref}
             value={commentDraft}
             onChange={(e) => setCommentDraft(e.target.value)}
+            onKeyDown={commentShortcuts.onKeyDown}
             placeholder="Comentario..."
             className="w-full border border-purple-200 rounded-lg px-2.5 py-2 text-sm text-purple-700 placeholder:text-purple-300"
             rows={2}
@@ -870,10 +884,17 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
   const contentView = editingText ? (
     <div className="flex-1 min-w-0 flex gap-1">
       <input
+        ref={textShortcuts.ref}
         type="text"
         value={textDraft}
         onChange={(e) => setTextDraft(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && (actions.onSaveContent(item, textDraft), setEditingText(false))}
+        onKeyDown={(e) => {
+          textShortcuts.onKeyDown(e)
+          if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+            actions.onSaveContent(item, textDraft)
+            setEditingText(false)
+          }
+        }}
         className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1 text-sm"
         autoFocus
       />
@@ -885,9 +906,8 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
       onClick={() => setEditingText(true)}
       className={`text-sm min-w-0 flex-1 whitespace-normal break-words cursor-text ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}
       title="Toca para editar el texto"
-    >
-      {item.content}
-    </span>
+      dangerouslySetInnerHTML={{ __html: formatRichText(item.content) }}
+    />
   )
 
   if (task) {
@@ -898,9 +918,10 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
           <input type="checkbox" checked={item.is_done} onChange={() => actions.onToggleDone(item)} className="w-4 h-4 shrink-0 mt-1" />
           <Link to={`/task/${task.id}`} className="min-w-0 flex-1 bg-gray-50 rounded-lg px-3 py-2">
             <div className="flex items-start gap-2">
-              <span className={`text-sm min-w-0 flex-1 whitespace-normal break-words ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                {item.content}
-              </span>
+              <span
+                className={`text-sm min-w-0 flex-1 whitespace-normal break-words ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}
+                dangerouslySetInnerHTML={{ __html: formatRichText(item.content) }}
+              />
               <span className="text-xs bg-gray-800 text-white rounded-full px-2 py-0.5 shrink-0">{task.status_label}</span>
             </div>
           </Link>
@@ -914,7 +935,7 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
   if (actions.convertingItemId === item.id) {
     return (
       <div ref={setNodeRef} style={dragStyle} className="border border-gray-200 rounded-lg p-2 space-y-2">
-        <p className="text-sm text-gray-800 whitespace-normal break-words">{item.content}</p>
+        <p className="text-sm text-gray-800 whitespace-normal break-words" dangerouslySetInnerHTML={{ __html: formatRichText(item.content) }} />
         {commentEditor}
         <select value={actions.convProject} onChange={(e) => actions.setConvProject(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
           <option value="">Proyecto *</option>
@@ -950,9 +971,8 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
             onClick={() => setEditingText(true)}
             className={`text-sm min-w-0 flex-1 whitespace-normal break-words cursor-text text-gray-600 ${item.is_done ? 'line-through' : ''}`}
             title="Toca para editar el texto"
-          >
-            {item.content}
-          </span>
+            dangerouslySetInnerHTML={{ __html: formatRichText(item.content) }}
+          />
         ) : (
           contentView
         )}

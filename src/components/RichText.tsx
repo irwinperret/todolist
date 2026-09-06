@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, type KeyboardEvent } from 'react'
 
 // Lightweight formatting: **bold**, *italic*, __underline__, ~~strikethrough~~.
 // Escapes HTML first so nothing else can be injected, then applies the
@@ -21,25 +21,24 @@ export function RichText({ text, className }: { text: string; className?: string
   return <p className={className} dangerouslySetInnerHTML={{ __html: formatRichText(text) }} />
 }
 
-export function RichTextArea(props: {
-  value: string
+// Shared logic behind the formatting keyboard shortcuts (Ctrl/Cmd+B/I/U,
+// Ctrl/Cmd+Shift+X for strikethrough), usable on any <input> or <textarea>.
+export function useFormatShortcuts<T extends HTMLInputElement | HTMLTextAreaElement>(
+  value: string,
   onChange: (v: string) => void
-  placeholder?: string
-  rows?: number
-  className?: string
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null)
+) {
+  const ref = useRef<T>(null)
 
   const wrapSelection = (marker: string) => {
     const el = ref.current
     if (!el) return
-    const start = el.selectionStart
-    const end = el.selectionEnd
-    const before = props.value.slice(0, start)
-    const selected = props.value.slice(start, end)
-    const after = props.value.slice(end)
+    const start = el.selectionStart ?? 0
+    const end = el.selectionEnd ?? 0
+    const before = value.slice(0, start)
+    const selected = value.slice(start, end)
+    const after = value.slice(end)
     const next = `${before}${marker}${selected || 'texto'}${marker}${after}`
-    props.onChange(next)
+    onChange(next)
     requestAnimationFrame(() => {
       el.focus()
       const selStart = start + marker.length
@@ -48,7 +47,7 @@ export function RichTextArea(props: {
     })
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDown = (e: KeyboardEvent<T>) => {
     const mod = e.metaKey || e.ctrlKey
     if (!mod) return
     const key = e.key.toLowerCase()
@@ -58,12 +57,24 @@ export function RichTextArea(props: {
     else if (e.shiftKey && key === 'x') { e.preventDefault(); wrapSelection('~~') }
   }
 
+  return { ref, onKeyDown }
+}
+
+export function RichTextArea(props: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  rows?: number
+  className?: string
+}) {
+  const { ref, onKeyDown } = useFormatShortcuts<HTMLTextAreaElement>(props.value, props.onChange)
+
   return (
     <textarea
       ref={ref}
       value={props.value}
       onChange={(e) => props.onChange(e.target.value)}
-      onKeyDown={handleKeyDown}
+      onKeyDown={onKeyDown}
       placeholder={props.placeholder}
       rows={props.rows ?? 4}
       className={props.className ?? 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base'}
