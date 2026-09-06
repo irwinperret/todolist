@@ -39,6 +39,13 @@ export default function Dashboard() {
     load()
   }, [])
 
+  const updateStatus = async (taskId: string, newStatusId: number) => {
+    const payload: { status_id: number; resolved_at?: string } =
+      newStatusId === 8 ? { status_id: 8, resolved_at: new Date().toISOString() } : { status_id: newStatusId }
+    await supabase.from('tasks').update(payload).eq('id', taskId)
+    load()
+  }
+
   const toggleBucket = (b: Bucket) => {
     setBucket((current) => (current === b ? 'none' : b))
   }
@@ -182,14 +189,26 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-500 truncate">{t.subactivity}</p>
                 )}
               </div>
-              <PriorityBadge id={t.priority_id} label={t.priority_label} />
+              <div
+                className="flex items-center gap-1 shrink-0"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+              >
+                <select
+                  value={t.status_id}
+                  onChange={(e) => updateStatus(t.id, Number(e.target.value))}
+                  className="text-xs bg-amber-100 text-amber-800 font-medium rounded-full pl-2 pr-1 py-0.5 border-0 appearance-none"
+                >
+                  {statuses.map((s) => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
+                  ))}
+                </select>
+                <PriorityBadge id={t.priority_id} label={t.priority_label} />
+              </div>
             </div>
             <div className="flex items-center gap-2 mt-2 text-xs text-gray-400 flex-wrap">
               <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
               <span>·</span>
               <span className="text-purple-700 font-medium">{personName(t.responsible_id)}</span>
-              <span>·</span>
-              <span className="text-amber-700 font-medium">{t.status_label}</span>
               {t.due_date && (
                 <>
                   <span>·</span>
