@@ -6,6 +6,8 @@ import Dashboard from './pages/Dashboard'
 import TaskDetail from './pages/TaskDetail'
 import Archive from './pages/Archive'
 import ManageLists from './pages/ManageLists'
+import Meetings from './pages/Meetings'
+import MeetingDetail from './pages/MeetingDetail'
 
 function Gate({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth()
@@ -25,6 +27,8 @@ export default function App() {
               <Route path="/new" element={<TaskDetail />} />
               <Route path="/task/:id" element={<TaskDetail />} />
               <Route path="/archive" element={<Archive />} />
+              <Route path="/meetings" element={<Meetings />} />
+              <Route path="/meetings/:id" element={<MeetingDetail />} />
               <Route path="/lists" element={<ManageLists />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

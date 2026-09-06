@@ -83,6 +83,31 @@ export type TaskLite = {
   status_id: number
 }
 
+export type Meeting = {
+  id: string
+  name: string
+  archived: boolean
+  created_at: string
+}
+
+export type MeetingMinute = {
+  id: string
+  meeting_id: string
+  meeting_date: string
+  attendees: string | null
+  minuta: string
+  acuerdos: string | null
+  created_at: string
+}
+
+export type MeetingItem = {
+  id: string
+  meeting_minute_id: string
+  content: string
+  task_id: string | null
+  created_at: string
+}
+
 export const PRIORITY_COLORS: Record<number, string> = {
   1: 'bg-red-500',
   2: 'bg-orange-500',
