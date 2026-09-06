@@ -6,13 +6,16 @@ import type { TaskScore } from '../lib/types'
 import PriorityBadge from '../components/PriorityBadge'
 
 const ME_DEBEN_STATUS_ID = 3
+const REVISAR_STATUS_ID = 4
+
+type Bucket = 'none' | 'meDeben' | 'revision'
 
 export default function Dashboard() {
   const { projects, people, statuses } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [showMeDeben, setShowMeDeben] = useState(false)
+  const [bucket, setBucket] = useState<Bucket>('none')
   const [search, setSearch] = useState('')
 
   const [projectFilter, setProjectFilter] = useState('')
@@ -36,14 +39,21 @@ export default function Dashboard() {
     load()
   }, [])
 
+  const toggleBucket = (b: Bucket) => {
+    setBucket((current) => (current === b ? 'none' : b))
+  }
+
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
-      // "Me deben" is a separate bucket from your own to-dos: shown only
-      // when the toggle is on, and hidden from the normal list otherwise.
-      if (showMeDeben) {
+      // "Me deben" and "Pendiente Revisión" are separate buckets from your
+      // own to-dos: each shown only when its toggle is active, and both
+      // hidden from the normal list otherwise.
+      if (bucket === 'meDeben') {
         if (t.status_id !== ME_DEBEN_STATUS_ID) return false
+      } else if (bucket === 'revision') {
+        if (t.status_id !== REVISAR_STATUS_ID) return false
       } else {
-        if (t.status_id === ME_DEBEN_STATUS_ID) return false
+        if (t.status_id === ME_DEBEN_STATUS_ID || t.status_id === REVISAR_STATUS_ID) return false
       }
 
       if (projectFilter && t.project_id !== projectFilter) return false
@@ -56,10 +66,17 @@ export default function Dashboard() {
       }
       return true
     })
-  }, [tasks, projectFilter, personFilter, statusFilter, search, showMeDeben])
+  }, [tasks, projectFilter, personFilter, statusFilter, search, bucket])
 
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
   const personName = (id: string | null) => people.find((p) => p.id === id)?.name ?? '—'
+
+  const emptyMessage =
+    bucket === 'meDeben'
+      ? 'Nadie te debe nada por ahora.'
+      : bucket === 'revision'
+      ? 'Nada pendiente de revisión.'
+      : 'Nada por aquí.'
 
   return (
     <div className="px-4 pt-4 space-y-3">
@@ -79,9 +96,9 @@ export default function Dashboard() {
           Filtros {filtersOpen ? '▲' : '▼'}
         </button>
         <button
-          onClick={() => setShowMeDeben((v) => !v)}
+          onClick={() => toggleBucket('meDeben')}
           className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
-            showMeDeben
+            bucket === 'meDeben'
               ? 'bg-[#e8ddd3] text-red-900 border-[#d8c7b5]'
               : 'bg-white text-red-800 border-gray-300'
           }`}
@@ -89,6 +106,17 @@ export default function Dashboard() {
           Me deben
         </button>
       </div>
+
+      <button
+        onClick={() => toggleBucket('revision')}
+        className={`w-full rounded-lg py-2 text-sm border font-medium ${
+          bucket === 'revision'
+            ? 'bg-[#dbe7f0] text-blue-900 border-[#c3d8e6]'
+            : 'bg-white text-blue-800 border-gray-300'
+        }`}
+      >
+        Pendiente Revisión
+      </button>
 
       {filtersOpen && (
         <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
@@ -127,9 +155,7 @@ export default function Dashboard() {
 
       {loading && <p className="text-gray-400 text-sm py-8 text-center">Cargando...</p>}
       {!loading && filtered.length === 0 && (
-        <p className="text-gray-400 text-sm py-8 text-center">
-          {showMeDeben ? 'Nadie te debe nada por ahora.' : 'Nada por aquí.'}
-        </p>
+        <p className="text-gray-400 text-sm py-8 text-center">{emptyMessage}</p>
       )}
 
       <div className="space-y-2">
