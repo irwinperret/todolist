@@ -97,6 +97,16 @@ export default function Dashboard() {
 
       <div className="flex gap-2">
         <button
+          onClick={() => setBucket('none')}
+          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+            bucket === 'none'
+              ? 'bg-gray-900 text-white border-gray-900'
+              : 'bg-white text-gray-700 border-gray-300'
+          }`}
+        >
+          IPA
+        </button>
+        <button
           onClick={() => toggleBucket('meDeben')}
           className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
             bucket === 'meDeben'
