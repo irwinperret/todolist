@@ -145,12 +145,12 @@ export default function Dashboard() {
               </div>
               <PriorityBadge id={t.priority_id} label={t.priority_label} />
             </div>
-            <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 flex-wrap">
-              <span>{projectName(t.project_id)}</span>
+            <div className="flex items-center gap-2 mt-2 text-xs text-gray-400 flex-wrap">
+              <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
               <span>·</span>
-              <span>{personName(t.responsible_id)}</span>
+              <span className="text-purple-700 font-medium">{personName(t.responsible_id)}</span>
               <span>·</span>
-              <span>{t.status_label}</span>
+              <span className="text-amber-700 font-medium">{t.status_label}</span>
               {t.due_date && (
                 <>
                   <span>·</span>

@@ -8,7 +8,7 @@ export default function TaskDetail() {
   const { id } = useParams()
   const isNew = id === 'new' || !id
   const navigate = useNavigate()
-  const { projects, people, statuses, priorities } = useLookups()
+  const { projects, people, statuses, priorities, reload: reloadLookups } = useLookups()
 
   const [task, setTask] = useState<Partial<TaskScore>>({
     title: '',
@@ -39,6 +39,9 @@ export default function TaskDetail() {
   const [depSearch, setDepSearch] = useState('')
   const [depResults, setDepResults] = useState<TaskLite[]>([])
   const [depSearching, setDepSearching] = useState(false)
+
+  const [creatingPerson, setCreatingPerson] = useState(false)
+  const [newPersonName, setNewPersonName] = useState('')
 
   const load = async () => {
     if (isNew) return
@@ -175,6 +178,20 @@ export default function TaskDetail() {
     load()
   }
 
+  const handleCreatePerson = async () => {
+    if (!newPersonName.trim()) return
+    const { data, error } = await supabase
+      .from('people')
+      .insert({ name: newPersonName.trim() })
+      .select()
+      .single()
+    if (error) return alert(error.message)
+    await reloadLookups()
+    setTask((t) => ({ ...t, responsible_id: data.id }))
+    setNewPersonName('')
+    setCreatingPerson(false)
+  }
+
   const handleArchiveToggle = async () => {
     await supabase.from('tasks').update({ archived: !task.archived }).eq('id', id)
     navigate('/')
@@ -243,14 +260,44 @@ export default function TaskDetail() {
 
         <select
           value={task.responsible_id ?? ''}
-          onChange={(e) => setTask({ ...task, responsible_id: e.target.value })}
+          onChange={(e) => {
+            if (e.target.value === '__new__') {
+              setCreatingPerson(true)
+            } else {
+              setTask({ ...task, responsible_id: e.target.value })
+            }
+          }}
           className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
         >
           <option value="">Responsable *</option>
           {people.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
+          <option value="__new__">+ Agregar nuevo responsable...</option>
         </select>
+
+        {creatingPerson && (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Nombre del nuevo responsable"
+              value={newPersonName}
+              onChange={(e) => setNewPersonName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreatePerson()}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-base"
+              autoFocus
+            />
+            <button onClick={handleCreatePerson} className="bg-gray-900 text-white rounded-lg px-4 text-sm">
+              Crear
+            </button>
+            <button
+              onClick={() => { setCreatingPerson(false); setNewPersonName('') }}
+              className="text-sm text-gray-400 px-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <select
