@@ -252,9 +252,9 @@ export default function Dashboard() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-medium text-gray-900 truncate">{t.title}</p>
+                  <p className="font-medium text-gray-900">{t.title}</p>
                   {t.subactivity && (
-                    <p className="text-sm text-gray-500 truncate">{t.subactivity}</p>
+                    <p className="text-sm text-gray-500">{t.subactivity}</p>
                   )}
                 </div>
                 <div
