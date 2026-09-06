@@ -105,6 +105,9 @@ export type MeetingItem = {
   meeting_minute_id: string
   content: string
   task_id: string | null
+  group_label: string | null
+  is_done: boolean
+  sort_order: number
   created_at: string
 }
 
