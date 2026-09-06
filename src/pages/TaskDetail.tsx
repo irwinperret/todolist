@@ -395,13 +395,21 @@ export default function TaskDetail() {
           </div>
         )}
 
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full bg-gray-900 text-white rounded-lg py-3 font-medium disabled:opacity-50"
-        >
-          {saving ? 'Guardando...' : isNew ? 'Crear tarea' : 'Guardar cambios'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => navigate('/')}
+            className="flex-1 border border-red-900 text-red-900 rounded-lg py-3 font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 bg-gray-900 text-white rounded-lg py-3 font-medium disabled:opacity-50"
+          >
+            {saving ? 'Guardando...' : isNew ? 'Crear tarea' : 'Guardar cambios'}
+          </button>
+        </div>
       </div>
 
       {!isNew && (
