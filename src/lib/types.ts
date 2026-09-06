@@ -125,6 +125,7 @@ export type MeetingItem = {
   group_label: string | null
   category_id: string | null
   is_done: boolean
+  is_long_term: boolean
   sort_order: number
   created_at: string
 }

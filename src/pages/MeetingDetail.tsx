@@ -51,6 +51,7 @@ type ItemActions = {
   onCancelConvert: () => void
   onConfirmConvert: (item: MeetingItem) => void
   onToggleDone: (item: MeetingItem) => void
+  onToggleLongTerm: (item: MeetingItem) => void
   onUnlink: (item: MeetingItem) => void
   onSaveComment: (item: MeetingItem, comment: string) => void
   onSaveContent: (item: MeetingItem, content: string) => void
@@ -288,6 +289,12 @@ export default function MeetingDetail() {
     load()
   }
 
+  const toggleLongTerm = async (item: MeetingItem) => {
+    const { error } = await supabase.from('meeting_items').update({ is_long_term: !item.is_long_term }).eq('id', item.id)
+    if (error) return alert(error.message)
+    load()
+  }
+
   const saveItemComment = async (item: MeetingItem, comment: string) => {
     const cleanComment = comment.trim() || null
     const { error } = await supabase.from('meeting_items').update({ comment: cleanComment }).eq('id', item.id)
@@ -347,6 +354,7 @@ export default function MeetingDetail() {
     onCancelConvert: () => setConvertingItemId(null),
     onConfirmConvert: confirmConvert,
     onToggleDone: toggleDone,
+    onToggleLongTerm: toggleLongTerm,
     onUnlink: unlinkItem,
     onSaveComment: saveItemComment,
     onSaveContent: saveItemContent,
@@ -480,6 +488,14 @@ function MinuteCard(props: {
       const key = item.category_id ?? '__none__'
       map[key] = map[key] ?? []
       map[key].push(item)
+    }
+    // "En el Radar" items always sink to the bottom of their category,
+    // regardless of drag order, since they're long-term/not urgent by definition
+    for (const key of Object.keys(map)) {
+      map[key].sort((a, b) => {
+        if (a.is_long_term !== b.is_long_term) return a.is_long_term ? 1 : -1
+        return a.sort_order - b.sort_order
+      })
     }
     return map
   }, [m.items])
@@ -903,15 +919,36 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
   }
 
   return (
-    <div ref={setNodeRef} style={dragStyle} className={`space-y-1 ${isDragging ? 'opacity-60' : ''}`}>
+    <div ref={setNodeRef} style={dragStyle} className={`space-y-1 ${isDragging ? 'opacity-60' : ''} ${item.is_long_term ? 'opacity-80' : ''}`}>
       <div className="flex items-start gap-2">
         {grip}
         <input type="checkbox" checked={item.is_done} onChange={() => actions.onToggleDone(item)} className="w-4 h-4 shrink-0 mt-1" />
-        {contentView}
+        {item.is_long_term && !editingText ? (
+          <span
+            onClick={() => setEditingText(true)}
+            className={`text-sm min-w-0 flex-1 whitespace-normal break-words cursor-text text-gray-400 ${item.is_done ? 'line-through' : ''}`}
+            title="Toca para editar el texto"
+          >
+            {item.content}
+          </span>
+        ) : (
+          contentView
+        )}
         <div className="flex gap-1 shrink-0 flex-wrap justify-end">
-          <button onClick={() => actions.onOpenConvert(item, 2)} className="text-xs bg-gray-100 text-gray-700 rounded-full px-2 py-0.5">To Do</button>
-          <button onClick={() => actions.onOpenConvert(item, 4)} className="text-xs bg-blue-50 text-blue-800 rounded-full px-2 py-0.5">Revisar</button>
-          <button onClick={() => actions.onOpenConvert(item, 3)} className="text-xs bg-[#e8ddd3] text-red-900 rounded-full px-2 py-0.5">Me deben</button>
+          {!item.is_long_term && (
+            <>
+              <button onClick={() => actions.onOpenConvert(item, 2)} className="text-xs bg-gray-100 text-gray-700 rounded-full px-2 py-0.5">To Do</button>
+              <button onClick={() => actions.onOpenConvert(item, 4)} className="text-xs bg-blue-50 text-blue-800 rounded-full px-2 py-0.5">Revisar</button>
+              <button onClick={() => actions.onOpenConvert(item, 3)} className="text-xs bg-[#e8ddd3] text-red-900 rounded-full px-2 py-0.5">Me deben</button>
+            </>
+          )}
+          <button
+            onClick={() => actions.onToggleLongTerm(item)}
+            className={`text-xs rounded-full px-2 py-0.5 ${item.is_long_term ? 'bg-gray-300 text-gray-700' : 'bg-gray-100 text-gray-500'}`}
+            title={item.is_long_term ? 'Quitar de En el Radar' : 'Marcar como En el Radar'}
+          >
+            {item.is_long_term ? '✓ En el Radar' : 'En el Radar'}
+          </button>
           <button onClick={() => actions.onDeleteItem(item)} className="text-xs text-red-400 px-1">✕</button>
         </div>
       </div>
