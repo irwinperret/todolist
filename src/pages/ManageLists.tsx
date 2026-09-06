@@ -6,15 +6,20 @@ import type { Project, Person } from '../lib/types'
 export default function ManageLists() {
   const { projects, people, reload } = useLookups()
   const [newProject, setNewProject] = useState('')
-  const [newPerson, setNewPerson] = useState('')
-  const [newPersonRole, setNewPersonRole] = useState('')
 
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [editingProjectName, setEditingProjectName] = useState('')
 
+  const [newPersonName, setNewPersonName] = useState('')
+  const [newPersonRole, setNewPersonRole] = useState('')
+  const [newPersonEmail, setNewPersonEmail] = useState('')
+  const [newPersonPhone, setNewPersonPhone] = useState('')
+
   const [editingPersonId, setEditingPersonId] = useState<string | null>(null)
   const [editingPersonName, setEditingPersonName] = useState('')
   const [editingPersonRole, setEditingPersonRole] = useState('')
+  const [editingPersonEmail, setEditingPersonEmail] = useState('')
+  const [editingPersonPhone, setEditingPersonPhone] = useState('')
 
   const addProject = async () => {
     if (!newProject.trim()) return
@@ -66,13 +71,18 @@ export default function ManageLists() {
   }
 
   const addPerson = async () => {
-    if (!newPerson.trim()) return
-    const { error } = await supabase
-      .from('people')
-      .insert({ name: newPerson.trim(), role: newPersonRole.trim() || null })
+    if (!newPersonName.trim()) return
+    const { error } = await supabase.from('people').insert({
+      name: newPersonName.trim(),
+      role: newPersonRole.trim() || null,
+      email: newPersonEmail.trim() || null,
+      phone: newPersonPhone.trim() || null,
+    })
     if (!error) {
-      setNewPerson('')
+      setNewPersonName('')
       setNewPersonRole('')
+      setNewPersonEmail('')
+      setNewPersonPhone('')
       reload()
     } else {
       alert(error.message)
@@ -83,13 +93,20 @@ export default function ManageLists() {
     setEditingPersonId(p.id)
     setEditingPersonName(p.name)
     setEditingPersonRole(p.role ?? '')
+    setEditingPersonEmail(p.email ?? '')
+    setEditingPersonPhone(p.phone ?? '')
   }
 
   const savePersonEdit = async () => {
     if (!editingPersonId || !editingPersonName.trim()) return
     const { error } = await supabase
       .from('people')
-      .update({ name: editingPersonName.trim(), role: editingPersonRole.trim() || null })
+      .update({
+        name: editingPersonName.trim(),
+        role: editingPersonRole.trim() || null,
+        email: editingPersonEmail.trim() || null,
+        phone: editingPersonPhone.trim() || null,
+      })
       .eq('id', editingPersonId)
     if (!error) {
       setEditingPersonId(null)
@@ -168,59 +185,104 @@ export default function ManageLists() {
 
       <section className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
         <p className="font-medium text-gray-900">Personas / Subcontratistas</p>
-        <div className="flex gap-2">
+
+        <div className="space-y-2 border border-gray-100 rounded-lg p-3 bg-gray-50">
+          <p className="text-xs text-gray-500">Nueva persona (solo el nombre es obligatorio)</p>
           <input
             type="text"
-            placeholder="Nombre"
-            value={newPerson}
-            onChange={(e) => setNewPerson(e.target.value)}
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            placeholder="Nombre *"
+            value={newPersonName}
+            onChange={(e) => setNewPersonName(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
           />
-          <input
-            type="text"
-            placeholder="Rol"
-            value={newPersonRole}
-            onChange={(e) => setNewPersonRole(e.target.value)}
-            className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          />
-          <button onClick={addPerson} className="bg-gray-900 text-white rounded-lg px-4 text-sm">
-            Agregar
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Rol (opcional)"
+              value={newPersonRole}
+              onChange={(e) => setNewPersonRole(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              placeholder="Email (opcional)"
+              value={newPersonEmail}
+              onChange={(e) => setNewPersonEmail(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            />
+            <input
+              type="tel"
+              placeholder="Teléfono (opcional)"
+              value={newPersonPhone}
+              onChange={(e) => setNewPersonPhone(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <button onClick={addPerson} className="w-full bg-gray-900 text-white rounded-lg py-2 text-sm">
+            Agregar persona
           </button>
         </div>
+
         <div className="space-y-1">
           {people.map((p) => (
-            <div key={p.id} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-100 gap-2">
+            <div key={p.id} className="py-2 border-b border-gray-100">
               {editingPersonId === p.id ? (
-                <>
+                <div className="space-y-2">
                   <input
                     type="text"
                     value={editingPersonName}
                     onChange={(e) => setEditingPersonName(e.target.value)}
-                    className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                    placeholder="Nombre"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
                     autoFocus
                   />
                   <input
                     type="text"
-                    placeholder="Rol"
                     value={editingPersonRole}
                     onChange={(e) => setEditingPersonRole(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && savePersonEdit()}
-                    className="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                    placeholder="Rol (opcional)"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
                   />
-                  <button onClick={savePersonEdit} className="text-xs text-green-600 shrink-0">Guardar</button>
-                  <button onClick={() => setEditingPersonId(null)} className="text-xs text-gray-400 shrink-0">Cancelar</button>
-                </>
+                  <input
+                    type="email"
+                    value={editingPersonEmail}
+                    onChange={(e) => setEditingPersonEmail(e.target.value)}
+                    placeholder="Email (opcional)"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                  />
+                  <input
+                    type="tel"
+                    value={editingPersonPhone}
+                    onChange={(e) => setEditingPersonPhone(e.target.value)}
+                    placeholder="Teléfono (opcional)"
+                    onKeyDown={(e) => e.key === 'Enter' && savePersonEdit()}
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                  />
+                  <div className="flex gap-3">
+                    <button onClick={savePersonEdit} className="text-xs text-green-600 font-medium">Guardar</button>
+                    <button onClick={() => setEditingPersonId(null)} className="text-xs text-gray-400">Cancelar</button>
+                  </div>
+                </div>
               ) : (
-                <>
-                  <span className="truncate">
-                    {p.name} {p.role && <span className="text-gray-400">({p.role})</span>}
-                  </span>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm truncate">
+                      {p.name} {p.role && <span className="text-gray-400">({p.role})</span>}
+                    </p>
+                    {(p.email || p.phone) && (
+                      <p className="text-xs text-gray-400 truncate">
+                        {[p.email, p.phone].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
+                  </div>
                   <div className="flex gap-2 shrink-0">
                     <button onClick={() => startEditPerson(p)} className="text-xs text-blue-600">Editar</button>
                     <button onClick={() => archivePerson(p.id)} className="text-xs text-gray-400">Archivar</button>
                     <button onClick={() => deletePerson(p.id, p.name)} className="text-xs text-red-500">Borrar</button>
                   </div>
-                </>
+                </div>
               )}
             </div>
           ))}
