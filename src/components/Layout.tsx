@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
+import OfflineBadge from './OfflineBadge'
 
 const navItems = [
   { to: '/', label: 'To Do', icon: '📋' },
@@ -25,6 +26,8 @@ export default function Layout() {
           Salir
         </button>
       </header>
+
+      <OfflineBadge />
 
       <main className="flex-1 pb-24">
         <Outlet />
