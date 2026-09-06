@@ -1,6 +1,6 @@
 {
-  "name": "Seguimiento",
-  "short_name": "Seguimiento",
+  "name": "TO DO LIST",
+  "short_name": "TO DO LIST",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f9fafb",

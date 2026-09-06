@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 
 const navItems = [
@@ -14,7 +14,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <h1 className="font-semibold text-gray-900">Seguimiento</h1>
+        <Link to="/" className="font-bold text-blue-900 text-lg">TO DO LIST</Link>
         <button
           onClick={async () => {
             await signOut()
