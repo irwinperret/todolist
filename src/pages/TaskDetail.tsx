@@ -51,30 +51,33 @@ export default function TaskDetail() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const draftIdRef = useRef<string | null>(null)
+  const recordingTaskIdRef = useRef<string | null>(null)
 
-  const load = async () => {
-    if (isNew) return
-    const { data } = await supabase.from('task_scores').select('*').eq('id', id).single()
+  const load = async (overrideId?: string) => {
+    const taskId = overrideId ?? id
+    if (!taskId || taskId === 'new') return
+    const { data } = await supabase.from('task_scores').select('*').eq('id', taskId).single()
     if (data) setTask(data as TaskScore)
 
     const { data: fu } = await supabase
       .from('task_followups')
       .select('*')
-      .eq('task_id', id)
+      .eq('task_id', taskId)
       .order('created_at', { ascending: false })
     setFollowups((fu as TaskFollowup[]) ?? [])
 
     const { data: ph } = await supabase
       .from('task_photos')
       .select('*')
-      .eq('task_id', id)
+      .eq('task_id', taskId)
       .order('uploaded_at', { ascending: false })
     setPhotos((ph as TaskPhoto[]) ?? [])
 
     const { data: dependsOnRows } = await supabase
       .from('task_dependencies')
       .select('depends_on_task_id, tasks:depends_on_task_id(id, title, status_id)')
-      .eq('task_id', id)
+      .eq('task_id', taskId)
     setDependsOn(
       ((dependsOnRows as any[]) ?? [])
         .map((r) => r.tasks)
@@ -84,7 +87,7 @@ export default function TaskDetail() {
     const { data: blocksRows } = await supabase
       .from('task_dependencies')
       .select('task_id, tasks:task_id(id, title, status_id)')
-      .eq('depends_on_task_id', id)
+      .eq('depends_on_task_id', taskId)
     setBlocks(
       ((blocksRows as any[]) ?? [])
         .map((r) => r.tasks)
@@ -94,9 +97,34 @@ export default function TaskDetail() {
     const { data: vn } = await supabase
       .from('task_voice_notes')
       .select('*')
-      .eq('task_id', id)
+      .eq('task_id', taskId)
       .order('created_at', { ascending: false })
     setVoiceNotes((vn as TaskVoiceNote[]) ?? [])
+  }
+
+  // Creates a lightweight draft task on first attachment (photo/voice) if the
+  // user hasn't saved yet, so media capture never has to wait for typing.
+  const ensureTaskId = async (): Promise<string | null> => {
+    if (!isNew) return id ?? null
+    if (draftIdRef.current) return draftIdRef.current
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert({
+        title: task.title?.trim() || 'Nueva actividad',
+        project_id: task.project_id || null,
+        responsible_id: task.responsible_id || null,
+        status_id: task.status_id ?? 2,
+        priority_id: task.priority_id ?? 4,
+      })
+      .select()
+      .single()
+    if (error) {
+      alert(error.message)
+      return null
+    }
+    draftIdRef.current = data.id
+    navigate(`/task/${data.id}`, { replace: true })
+    return data.id
   }
 
   useEffect(() => {
@@ -163,13 +191,31 @@ export default function TaskDetail() {
       const { data, error } = await supabase.from('tasks').insert(payload).select().single()
       setSaving(false)
       if (error) return alert(error.message)
+      draftIdRef.current = null
       navigate(`/task/${data.id}`, { replace: true })
     } else {
       const { error } = await supabase.from('tasks').update(payload).eq('id', id)
       setSaving(false)
       if (error) return alert(error.message)
+      draftIdRef.current = null
       navigate('/')
     }
+  }
+
+  const handleCancel = async () => {
+    // if a draft was auto-created just to attach a photo/voice note, and the
+    // person never actually saved it, discard it instead of leaving a stray
+    // near-empty task behind
+    if (draftIdRef.current) {
+      if (photos.length > 0) {
+        await supabase.storage.from('task-photos').remove(photos.map((p) => p.storage_path))
+      }
+      if (voiceNotes.length > 0) {
+        await supabase.storage.from('task-voice-notes').remove(voiceNotes.map((v) => v.storage_path))
+      }
+      await supabase.from('tasks').delete().eq('id', draftIdRef.current)
+    }
+    navigate('/')
   }
 
   const handleAddNote = async () => {
@@ -182,15 +228,13 @@ export default function TaskDetail() {
   }
 
   const handlePhotoUpload = async (file: File) => {
-    if (isNew) {
-      alert('Guarda la tarea primero antes de agregar fotos.')
-      return
-    }
-    const path = `${id}/${Date.now()}_${file.name}`
+    const taskId = await ensureTaskId()
+    if (!taskId) return
+    const path = `${taskId}/${Date.now()}_${file.name}`
     const { error: uploadError } = await supabase.storage.from('task-photos').upload(path, file)
     if (uploadError) return alert(uploadError.message)
-    const { error } = await supabase.from('task_photos').insert({ task_id: id, storage_path: path })
-    if (!error) load()
+    const { error } = await supabase.from('task_photos').insert({ task_id: taskId, storage_path: path })
+    if (!error) load(taskId)
   }
 
   const pickMimeType = () => {
@@ -202,10 +246,9 @@ export default function TaskDetail() {
   }
 
   const startRecording = async () => {
-    if (isNew) {
-      alert('Guarda la tarea primero antes de grabar una nota de voz.')
-      return
-    }
+    const taskId = await ensureTaskId()
+    if (!taskId) return
+    recordingTaskIdRef.current = taskId
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const mimeType = pickMimeType()
@@ -217,7 +260,7 @@ export default function TaskDetail() {
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop())
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
-        await uploadVoiceNote(blob, recorder.mimeType)
+        await uploadVoiceNote(blob, recorder.mimeType, recordingTaskIdRef.current!)
       }
       mediaRecorderRef.current = recorder
       recorder.start()
@@ -235,10 +278,10 @@ export default function TaskDetail() {
     if (timerRef.current) clearInterval(timerRef.current)
   }
 
-  const uploadVoiceNote = async (blob: Blob, mimeType: string) => {
+  const uploadVoiceNote = async (blob: Blob, mimeType: string, taskId: string) => {
     setUploadingVoice(true)
     const ext = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm'
-    const path = `${id}/${Date.now()}.${ext}`
+    const path = `${taskId}/${Date.now()}.${ext}`
     const { error: uploadError } = await supabase.storage
       .from('task-voice-notes')
       .upload(path, blob, { contentType: mimeType || 'audio/webm' })
@@ -248,9 +291,9 @@ export default function TaskDetail() {
     }
     const { error } = await supabase
       .from('task_voice_notes')
-      .insert({ task_id: id, storage_path: path, duration_seconds: recordSeconds })
+      .insert({ task_id: taskId, storage_path: path, duration_seconds: recordSeconds })
     setUploadingVoice(false)
-    if (!error) load()
+    if (!error) load(taskId)
   }
 
   const deleteVoiceNote = async (note: TaskVoiceNote) => {
@@ -502,7 +545,7 @@ export default function TaskDetail() {
 
         <div className="flex gap-2">
           <button
-            onClick={() => navigate('/')}
+            onClick={handleCancel}
             className="flex-1 border border-red-900 text-red-900 rounded-lg py-3 font-medium"
           >
             Cancelar
@@ -517,72 +560,72 @@ export default function TaskDetail() {
         </div>
       </div>
 
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+        <p className="font-medium text-gray-900">Notas de voz</p>
+
+        {!recording ? (
+          <button
+            onClick={startRecording}
+            disabled={uploadingVoice}
+            className="w-full bg-red-700 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            🎤 {uploadingVoice ? 'Subiendo...' : 'Grabar nota de voz'}
+          </button>
+        ) : (
+          <button
+            onClick={stopRecording}
+            className="w-full bg-gray-900 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 animate-pulse"
+          >
+            ⏹ Detener ({Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')})
+          </button>
+        )}
+
+        {voiceNotes.length > 0 && (
+          <div className="space-y-2 pt-1">
+            {voiceNotes.map((v) => (
+              <div key={v.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2">
+                {voiceUrls[v.id] ? (
+                  <audio controls src={voiceUrls[v.id]} className="flex-1 h-10" />
+                ) : (
+                  <p className="text-xs text-gray-400 flex-1">Cargando...</p>
+                )}
+                <button onClick={() => deleteVoiceNote(v)} className="text-xs text-red-500 shrink-0">
+                  Borrar
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+        <p className="font-medium text-gray-900">Fotos</p>
+        <div className="flex gap-2 flex-wrap">
+          {photos.map((p) => (
+            <img
+              key={p.id}
+              src={photoUrls[p.id]}
+              className="w-20 h-20 object-cover rounded-lg border border-gray-200"
+            />
+          ))}
+          <label className="w-20 h-20 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg text-gray-400 text-2xl cursor-pointer">
+            +
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handlePhotoUpload(file)
+              }}
+            />
+          </label>
+        </div>
+      </div>
+
       {!isNew && (
         <>
-          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-            <p className="font-medium text-gray-900">Notas de voz</p>
-
-            {!recording ? (
-              <button
-                onClick={startRecording}
-                disabled={uploadingVoice}
-                className="w-full bg-red-700 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                🎤 {uploadingVoice ? 'Subiendo...' : 'Grabar nota de voz'}
-              </button>
-            ) : (
-              <button
-                onClick={stopRecording}
-                className="w-full bg-gray-900 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 animate-pulse"
-              >
-                ⏹ Detener ({Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')})
-              </button>
-            )}
-
-            {voiceNotes.length > 0 && (
-              <div className="space-y-2 pt-1">
-                {voiceNotes.map((v) => (
-                  <div key={v.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2">
-                    {voiceUrls[v.id] ? (
-                      <audio controls src={voiceUrls[v.id]} className="flex-1 h-10" />
-                    ) : (
-                      <p className="text-xs text-gray-400 flex-1">Cargando...</p>
-                    )}
-                    <button onClick={() => deleteVoiceNote(v)} className="text-xs text-red-500 shrink-0">
-                      Borrar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-            <p className="font-medium text-gray-900">Fotos</p>
-            <div className="flex gap-2 flex-wrap">
-              {photos.map((p) => (
-                <img
-                  key={p.id}
-                  src={photoUrls[p.id]}
-                  className="w-20 h-20 object-cover rounded-lg border border-gray-200"
-                />
-              ))}
-              <label className="w-20 h-20 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg text-gray-400 text-2xl cursor-pointer">
-                +
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) handlePhotoUpload(file)
-                  }}
-                />
-              </label>
-            </div>
-          </div>
-
           <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
             <p className="font-medium text-gray-900">Seguimiento</p>
             <div className="flex gap-2">
