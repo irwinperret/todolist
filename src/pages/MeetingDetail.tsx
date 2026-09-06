@@ -54,6 +54,9 @@ export default function MeetingDetail() {
   const [convStatus, setConvStatus] = useState<number>(2)
   const [convPriority, setConvPriority] = useState<number>(4)
 
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [editingCategoryName, setEditingCategoryName] = useState('')
+
   const load = async () => {
     setLoading(true)
     const { data: m } = await supabase.from('meetings').select('*').eq('id', id).single()
@@ -253,12 +256,27 @@ export default function MeetingDetail() {
     load()
   }
 
-  const openConvert = (item: MeetingItem) => {
+  const openConvert = (item: MeetingItem, presetStatus?: number) => {
     setConvertingItemId(item.id)
     setConvProject('')
     setConvResponsible('')
-    setConvStatus(2)
+    setConvStatus(presetStatus ?? 2)
     setConvPriority(4)
+  }
+
+  const startRenameCategory = (cat: MeetingCategory) => {
+    setEditingCategoryId(cat.id)
+    setEditingCategoryName(cat.name)
+  }
+
+  const saveRenameCategory = async () => {
+    if (!editingCategoryId || !editingCategoryName.trim()) return
+    await supabase
+      .from('meeting_categories')
+      .update({ name: editingCategoryName.trim() })
+      .eq('id', editingCategoryId)
+    setEditingCategoryId(null)
+    load()
   }
 
   const confirmConvert = async (item: MeetingItem) => {
@@ -466,6 +484,12 @@ export default function MeetingDetail() {
             setConvStatus={setConvStatus}
             convPriority={convPriority}
             setConvPriority={setConvPriority}
+            editingCategoryId={editingCategoryId}
+            editingCategoryName={editingCategoryName}
+            setEditingCategoryName={setEditingCategoryName}
+            onStartRenameCategory={startRenameCategory}
+            onSaveRenameCategory={saveRenameCategory}
+            onCancelRenameCategory={() => setEditingCategoryId(null)}
           />
         ))}
       </div>
@@ -477,7 +501,7 @@ function ItemRowView(props: {
   item: MeetingItem
   taskById: Record<string, TaskScore>
   convertingItemId: string | null
-  onOpenConvert: (item: MeetingItem) => void
+  onOpenConvert: (item: MeetingItem, presetStatus?: number) => void
   onCancelConvert: () => void
   onConfirmConvert: (item: MeetingItem) => void
   onToggleDone: (item: MeetingItem) => void
@@ -577,19 +601,36 @@ function ItemRowView(props: {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
       <input
         type="checkbox"
         checked={item.is_done}
         onChange={() => props.onToggleDone(item)}
         className="w-4 h-4 shrink-0"
       />
-      <span className={`text-sm flex-1 ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+      <span className={`text-sm flex-1 min-w-[100px] ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
         {item.content}
       </span>
-      <button onClick={() => props.onOpenConvert(item)} className="text-xs text-blue-600 shrink-0">
-        Sincronizar
-      </button>
+      <div className="flex gap-1 shrink-0">
+        <button
+          onClick={() => props.onOpenConvert(item, 2)}
+          className="text-xs bg-gray-100 text-gray-700 rounded-full px-2 py-0.5"
+        >
+          To Do
+        </button>
+        <button
+          onClick={() => props.onOpenConvert(item, 4)}
+          className="text-xs bg-blue-50 text-blue-800 rounded-full px-2 py-0.5"
+        >
+          Revisar
+        </button>
+        <button
+          onClick={() => props.onOpenConvert(item, 3)}
+          className="text-xs bg-[#e8ddd3] text-red-900 rounded-full px-2 py-0.5"
+        >
+          Me deben
+        </button>
+      </div>
     </div>
   )
 }
@@ -599,19 +640,46 @@ function CategoryBlock(props: {
   depth: number
   itemsByCategory: Record<string, MeetingItem[]>
   itemProps: Omit<Parameters<typeof ItemRowView>[0], 'item'>
+  editingCategoryId: string | null
+  editingCategoryName: string
+  setEditingCategoryName: (v: string) => void
+  onStartRenameCategory: (cat: MeetingCategory) => void
+  onSaveRenameCategory: () => void
+  onCancelRenameCategory: () => void
 }) {
   const items = props.itemsByCategory[props.node.id] ?? []
+  const isEditing = props.editingCategoryId === props.node.id
   return (
     <div className={props.depth > 0 ? 'ml-4 space-y-1.5' : 'space-y-1.5'}>
-      <p
-        className={
-          props.depth === 0
-            ? 'text-xs font-semibold text-gray-500 uppercase tracking-wide'
-            : 'text-xs font-medium text-gray-400'
-        }
-      >
-        {props.depth > 0 ? '— ' : ''}{props.node.name}
-      </p>
+      {isEditing ? (
+        <div className="flex gap-2 items-center">
+          <input
+            type="text"
+            value={props.editingCategoryName}
+            onChange={(e) => props.setEditingCategoryName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && props.onSaveRenameCategory()}
+            className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs"
+            autoFocus
+          />
+          <button onClick={props.onSaveRenameCategory} className="text-xs text-green-600">Guardar</button>
+          <button onClick={props.onCancelRenameCategory} className="text-xs text-gray-400">Cancelar</button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <p
+            className={
+              props.depth === 0
+                ? 'text-xs font-semibold text-gray-500 uppercase tracking-wide'
+                : 'text-xs font-medium text-gray-400'
+            }
+          >
+            {props.depth > 0 ? '— ' : ''}{props.node.name}
+          </p>
+          <button onClick={() => props.onStartRenameCategory(props.node)} className="text-xs text-blue-600">
+            Editar
+          </button>
+        </div>
+      )}
       {items.map((item) => (
         <ItemRowView key={item.id} item={item} {...props.itemProps} />
       ))}
@@ -622,6 +690,12 @@ function CategoryBlock(props: {
           depth={props.depth + 1}
           itemsByCategory={props.itemsByCategory}
           itemProps={props.itemProps}
+          editingCategoryId={props.editingCategoryId}
+          editingCategoryName={props.editingCategoryName}
+          setEditingCategoryName={props.setEditingCategoryName}
+          onStartRenameCategory={props.onStartRenameCategory}
+          onSaveRenameCategory={props.onSaveRenameCategory}
+          onCancelRenameCategory={props.onCancelRenameCategory}
         />
       ))}
     </div>
@@ -635,7 +709,7 @@ function MinuteCard(props: {
   onToggleDone: (item: MeetingItem) => void
   onUnlink: (item: MeetingItem) => void
   convertingItemId: string | null
-  onOpenConvert: (item: MeetingItem) => void
+  onOpenConvert: (item: MeetingItem, presetStatus?: number) => void
   onCancelConvert: () => void
   onConfirmConvert: (item: MeetingItem) => void
   projects: { id: string; name: string }[]
@@ -650,6 +724,12 @@ function MinuteCard(props: {
   setConvStatus: (v: number) => void
   convPriority: number
   setConvPriority: (v: number) => void
+  editingCategoryId: string | null
+  editingCategoryName: string
+  setEditingCategoryName: (v: string) => void
+  onStartRenameCategory: (cat: MeetingCategory) => void
+  onSaveRenameCategory: () => void
+  onCancelRenameCategory: () => void
 }) {
   const { minute: m } = props
 
@@ -720,7 +800,19 @@ function MinuteCard(props: {
       {(tree.length > 0 || uncategorized.length > 0) && (
         <div className="space-y-4 pt-2 border-t border-gray-100">
           {tree.map((node) => (
-            <CategoryBlock key={node.id} node={node} depth={0} itemsByCategory={itemsByCategory} itemProps={itemProps} />
+            <CategoryBlock
+              key={node.id}
+              node={node}
+              depth={0}
+              itemsByCategory={itemsByCategory}
+              itemProps={itemProps}
+              editingCategoryId={props.editingCategoryId}
+              editingCategoryName={props.editingCategoryName}
+              setEditingCategoryName={props.setEditingCategoryName}
+              onStartRenameCategory={props.onStartRenameCategory}
+              onSaveRenameCategory={props.onSaveRenameCategory}
+              onCancelRenameCategory={props.onCancelRenameCategory}
+            />
           ))}
           {uncategorized.length > 0 && (
             <div className="space-y-1.5">
