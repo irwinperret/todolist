@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   DndContext,
-  useDraggable,
   useDroppable,
   PointerSensor,
   TouchSensor,
@@ -10,6 +9,8 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { Meeting, MeetingMinute, MeetingItem, MeetingCategory, TaskScore } from '../lib/types'
@@ -327,8 +328,17 @@ export default function MeetingDetail() {
     load()
   }
 
-  const moveItemToCategory = async (itemId: string, categoryId: string | null) => {
-    await supabase.from('meeting_items').update({ category_id: categoryId }).eq('id', itemId)
+  const reorderItems = async (
+    updates: { id: string; category_id: string | null; sort_order: number }[]
+  ) => {
+    await Promise.all(
+      updates.map((u) =>
+        supabase
+          .from('meeting_items')
+          .update({ category_id: u.category_id, sort_order: u.sort_order })
+          .eq('id', u.id)
+      )
+    )
     load()
   }
 
@@ -513,7 +523,7 @@ export default function MeetingDetail() {
             onStartRenameCategory={startRenameCategory}
             onSaveRenameCategory={saveRenameCategory}
             onCancelRenameCategory={() => setEditingCategoryId(null)}
-            onMoveItem={moveItemToCategory}
+            onReorderItems={reorderItems}
           />
         ))}
       </div>
@@ -546,12 +556,15 @@ function ItemRowView(props: {
   const { item, taskById } = props
   const task = item.task_id ? taskById[item.task_id] : null
 
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `item:${item.id}`,
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
   })
-  const dragStyle = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50, position: 'relative' as const }
-    : undefined
+  const dragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    position: 'relative' as const,
+  }
 
   const grip = (
     <button
@@ -734,9 +747,11 @@ function CategoryBlock(props: {
         {items.length === 0 && (
           <p className="text-xs text-gray-300 italic px-1">Suelta aquí para mover un item</p>
         )}
-        {items.map((item) => (
-          <ItemRowView key={item.id} item={item} {...props.itemProps} />
-        ))}
+        <SortableContext items={items.map((it) => it.id)} strategy={verticalListSortingStrategy}>
+          {items.map((item) => (
+            <ItemRowView key={item.id} item={item} {...props.itemProps} />
+          ))}
+        </SortableContext>
       </div>
       {props.node.children.map((child) => (
         <CategoryBlock
@@ -785,7 +800,7 @@ function MinuteCard(props: {
   onStartRenameCategory: (cat: MeetingCategory) => void
   onSaveRenameCategory: () => void
   onCancelRenameCategory: () => void
-  onMoveItem: (itemId: string, categoryId: string | null) => void
+  onReorderItems: (updates: { id: string; category_id: string | null; sort_order: number }[]) => void
 }) {
   const { minute: m } = props
 
@@ -797,13 +812,73 @@ function MinuteCard(props: {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over) return
-    const itemId = String(active.id).replace(/^item:/, '')
+    const activeId = String(active.id)
     const overId = String(over.id)
-    if (overId === 'cat:__none__') {
-      props.onMoveItem(itemId, null)
-    } else if (overId.startsWith('cat:')) {
-      props.onMoveItem(itemId, overId.replace(/^cat:/, ''))
+    if (activeId === overId) return
+
+    const catKey = (catId: string | null) => catId ?? '__none__'
+
+    // snapshot current items grouped by category, in their current order
+    const byCat: Record<string, MeetingItem[]> = {}
+    for (const it of m.items) {
+      const k = catKey(it.category_id)
+      byCat[k] = byCat[k] ?? []
+      byCat[k].push(it)
     }
+    Object.values(byCat).forEach((arr) => arr.sort((a, b) => a.sort_order - b.sort_order))
+
+    let sourceCatKey: string | null = null
+    for (const [k, arr] of Object.entries(byCat)) {
+      if (arr.some((it) => it.id === activeId)) {
+        sourceCatKey = k
+        break
+      }
+    }
+    if (!sourceCatKey) return
+    const sourceArr = byCat[sourceCatKey]
+    const activeItem = sourceArr.find((it) => it.id === activeId)!
+
+    let targetCatKey: string
+    let targetIndex: number
+
+    if (overId.startsWith('cat:')) {
+      targetCatKey = overId.replace(/^cat:/, '')
+      targetIndex = (byCat[targetCatKey] ?? []).length
+    } else {
+      let found: string | null = null
+      let idx = 0
+      for (const [k, arr] of Object.entries(byCat)) {
+        const i = arr.findIndex((it) => it.id === overId)
+        if (i !== -1) {
+          found = k
+          idx = i
+          break
+        }
+      }
+      if (!found) return
+      targetCatKey = found
+      targetIndex = idx
+    }
+
+    const newCategoryId = targetCatKey === '__none__' ? null : targetCatKey
+    const updates: { id: string; category_id: string | null; sort_order: number }[] = []
+
+    if (sourceCatKey === targetCatKey) {
+      const oldIndex = sourceArr.findIndex((it) => it.id === activeId)
+      const reordered = arrayMove(sourceArr, oldIndex, targetIndex)
+      reordered.forEach((it, i) => updates.push({ id: it.id, category_id: newCategoryId, sort_order: i }))
+    } else {
+      const newSourceArr = sourceArr.filter((it) => it.id !== activeId)
+      const targetArr = [...(byCat[targetCatKey] ?? [])]
+      targetArr.splice(targetIndex, 0, activeItem)
+      const sourceCategoryId = sourceCatKey === '__none__' ? null : sourceCatKey
+      newSourceArr.forEach((it, i) => updates.push({ id: it.id, category_id: sourceCategoryId, sort_order: i }))
+      targetArr.forEach((it, i) =>
+        updates.push({ id: it.id, category_id: it.id === activeId ? newCategoryId : newCategoryId, sort_order: i })
+      )
+    }
+
+    props.onReorderItems(updates)
   }
 
   const tree = useMemo(() => buildTree(m.categories), [m.categories])
@@ -913,9 +988,11 @@ function UncategorizedZone(props: {
         {props.items.length === 0 && (
           <p className="text-xs text-gray-300 italic px-1">Suelta aquí para quitar la categoría</p>
         )}
-        {props.items.map((item) => (
-          <ItemRowView key={item.id} item={item} {...props.itemProps} />
-        ))}
+        <SortableContext items={props.items.map((it) => it.id)} strategy={verticalListSortingStrategy}>
+          {props.items.map((item) => (
+            <ItemRowView key={item.id} item={item} {...props.itemProps} />
+          ))}
+        </SortableContext>
       </div>
     </div>
   )
