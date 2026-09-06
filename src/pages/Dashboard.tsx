@@ -88,13 +88,14 @@ export default function Dashboard() {
         className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base bg-white"
       />
 
+      <button
+        onClick={() => setFiltersOpen((v) => !v)}
+        className="w-full border border-gray-300 rounded-lg py-2 text-sm bg-white"
+      >
+        Filtros {filtersOpen ? '▲' : '▼'}
+      </button>
+
       <div className="flex gap-2">
-        <button
-          onClick={() => setFiltersOpen((v) => !v)}
-          className="flex-1 border border-gray-300 rounded-lg py-2 text-sm bg-white"
-        >
-          Filtros {filtersOpen ? '▲' : '▼'}
-        </button>
         <button
           onClick={() => toggleBucket('meDeben')}
           className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
@@ -105,18 +106,17 @@ export default function Dashboard() {
         >
           Me deben
         </button>
+        <button
+          onClick={() => toggleBucket('revision')}
+          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+            bucket === 'revision'
+              ? 'bg-[#dbe7f0] text-blue-900 border-[#c3d8e6]'
+              : 'bg-white text-blue-800 border-gray-300'
+          }`}
+        >
+          Pendiente Revisión
+        </button>
       </div>
-
-      <button
-        onClick={() => toggleBucket('revision')}
-        className={`w-full rounded-lg py-2 text-sm border font-medium ${
-          bucket === 'revision'
-            ? 'bg-[#dbe7f0] text-blue-900 border-[#c3d8e6]'
-            : 'bg-white text-blue-800 border-gray-300'
-        }`}
-      >
-        Pendiente Revisión
-      </button>
 
       {filtersOpen && (
         <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
