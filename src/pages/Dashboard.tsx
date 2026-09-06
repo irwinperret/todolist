@@ -269,8 +269,8 @@ export default function Dashboard() {
               to={`/task/${t.id}`}
               className="block bg-white border border-gray-200 rounded-xl p-3 active:bg-gray-50"
             >
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <div className="order-1 w-full sm:w-auto sm:flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
                   <p className="font-medium text-gray-900">{t.title}</p>
                   {t.subactivity && (
                     <p className="text-sm text-gray-500">{t.subactivity}</p>
@@ -278,7 +278,7 @@ export default function Dashboard() {
                 </div>
 
                 <div
-                  className="order-3 sm:order-2 flex items-center gap-1 shrink-0 ml-auto"
+                  className="flex items-center gap-1 shrink-0"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
                 >
                   <select
@@ -292,40 +292,40 @@ export default function Dashboard() {
                   </select>
                   <PriorityBadge id={t.priority_id} label={t.priority_label} />
                 </div>
+              </div>
 
-                <div className="order-2 sm:order-3 w-auto min-w-0 flex-1 sm:flex-none flex items-center gap-2 mt-1 sm:mt-0 text-xs text-gray-400 flex-wrap">
-                  <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
-                  <span>·</span>
-                  {hasContact ? (
-                    <button
-                      type="button"
-                      className="text-purple-700 font-medium underline underline-offset-2 hover:text-purple-900"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setContactPerson(person)
-                      }}
-                    >
-                      {person?.name}
-                    </button>
-                  ) : (
-                    <span className="text-purple-700 font-medium">{person?.name ?? '—'}</span>
-                  )}
-                  {t.due_date && (
-                    <>
-                      <span>·</span>
-                      <span>vence {new Date(t.due_date).toLocaleDateString()}</span>
-                    </>
-                  )}
-                  {t.blocking_count > 0 && (
-                    <>
-                      <span>·</span>
-                      <span className="text-red-500 font-medium">
-                        bloquea {t.blocking_count} {t.blocking_count === 1 ? 'tarea' : 'tareas'}
-                      </span>
-                    </>
-                  )}
-                </div>
+              <div className="flex items-center gap-2 mt-2 text-xs text-gray-400 flex-wrap">
+                <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
+                <span>·</span>
+                {hasContact ? (
+                  <button
+                    type="button"
+                    className="text-purple-700 font-medium underline underline-offset-2 hover:text-purple-900"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setContactPerson(person)
+                    }}
+                  >
+                    {person?.name}
+                  </button>
+                ) : (
+                  <span className="text-purple-700 font-medium">{person?.name ?? '—'}</span>
+                )}
+                {t.due_date && (
+                  <>
+                    <span>·</span>
+                    <span>vence {new Date(t.due_date).toLocaleDateString()}</span>
+                  </>
+                )}
+                {t.blocking_count > 0 && (
+                  <>
+                    <span>·</span>
+                    <span className="text-red-500 font-medium">
+                      bloquea {t.blocking_count} {t.blocking_count === 1 ? 'tarea' : 'tareas'}
+                    </span>
+                  </>
+                )}
               </div>
             </Link>
           )
