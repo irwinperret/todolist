@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
-import type { TaskFollowup, TaskPhoto, TaskScore, TaskLite } from '../lib/types'
+import type { TaskFollowup, TaskPhoto, TaskScore, TaskLite, TaskVoiceNote } from '../lib/types'
 
 export default function TaskDetail() {
   const { id } = useParams()
@@ -43,6 +43,15 @@ export default function TaskDetail() {
   const [creatingPerson, setCreatingPerson] = useState(false)
   const [newPersonName, setNewPersonName] = useState('')
 
+  const [voiceNotes, setVoiceNotes] = useState<TaskVoiceNote[]>([])
+  const [voiceUrls, setVoiceUrls] = useState<Record<string, string>>({})
+  const [recording, setRecording] = useState(false)
+  const [recordSeconds, setRecordSeconds] = useState(0)
+  const [uploadingVoice, setUploadingVoice] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const load = async () => {
     if (isNew) return
     const { data } = await supabase.from('task_scores').select('*').eq('id', id).single()
@@ -81,6 +90,13 @@ export default function TaskDetail() {
         .map((r) => r.tasks)
         .filter(Boolean) as TaskLite[]
     )
+
+    const { data: vn } = await supabase
+      .from('task_voice_notes')
+      .select('*')
+      .eq('task_id', id)
+      .order('created_at', { ascending: false })
+    setVoiceNotes((vn as TaskVoiceNote[]) ?? [])
   }
 
   useEffect(() => {
@@ -101,6 +117,25 @@ export default function TaskDetail() {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos])
+
+  useEffect(() => {
+    voiceNotes.forEach(async (v) => {
+      if (voiceUrls[v.id]) return
+      const { data } = await supabase.storage
+        .from('task-voice-notes')
+        .createSignedUrl(v.storage_path, 60 * 60)
+      if (data?.signedUrl) {
+        setVoiceUrls((prev) => ({ ...prev, [v.id]: data.signedUrl }))
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceNotes])
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [])
 
   const handleSave = async () => {
     if (!task.title || !task.project_id || !task.responsible_id) {
@@ -158,6 +193,73 @@ export default function TaskDetail() {
     if (!error) load()
   }
 
+  const pickMimeType = () => {
+    const candidates = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg']
+    for (const c of candidates) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c)) return c
+    }
+    return ''
+  }
+
+  const startRecording = async () => {
+    if (isNew) {
+      alert('Guarda la tarea primero antes de grabar una nota de voz.')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = pickMimeType()
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      chunksRef.current = []
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop())
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        await uploadVoiceNote(blob, recorder.mimeType)
+      }
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setRecording(true)
+      setRecordSeconds(0)
+      timerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000)
+    } catch (err) {
+      alert('No se pudo acceder al micrófono. Revisa los permisos del navegador.')
+    }
+  }
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop()
+    setRecording(false)
+    if (timerRef.current) clearInterval(timerRef.current)
+  }
+
+  const uploadVoiceNote = async (blob: Blob, mimeType: string) => {
+    setUploadingVoice(true)
+    const ext = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm'
+    const path = `${id}/${Date.now()}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('task-voice-notes')
+      .upload(path, blob, { contentType: mimeType || 'audio/webm' })
+    if (uploadError) {
+      setUploadingVoice(false)
+      return alert(uploadError.message)
+    }
+    const { error } = await supabase
+      .from('task_voice_notes')
+      .insert({ task_id: id, storage_path: path, duration_seconds: recordSeconds })
+    setUploadingVoice(false)
+    if (!error) load()
+  }
+
+  const deleteVoiceNote = async (note: TaskVoiceNote) => {
+    if (!confirm('¿Borrar esta nota de voz?')) return
+    await supabase.storage.from('task-voice-notes').remove([note.storage_path])
+    await supabase.from('task_voice_notes').delete().eq('id', note.id)
+    load()
+  }
+
   const handleComplete = async () => {
     setResolutionPrompt(true)
   }
@@ -198,9 +300,12 @@ export default function TaskDetail() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('¿Borrar esta tarea permanentemente? Esto también borra sus fotos, notas de seguimiento y dependencias. No se puede deshacer.')) return
+    if (!confirm('¿Borrar esta tarea permanentemente? Esto también borra sus fotos, notas de voz, notas de seguimiento y dependencias. No se puede deshacer.')) return
     if (photos.length > 0) {
       await supabase.storage.from('task-photos').remove(photos.map((p) => p.storage_path))
+    }
+    if (voiceNotes.length > 0) {
+      await supabase.storage.from('task-voice-notes').remove(voiceNotes.map((v) => v.storage_path))
     }
     const { error } = await supabase.from('tasks').delete().eq('id', id)
     if (error) return alert(error.message)
@@ -414,6 +519,44 @@ export default function TaskDetail() {
 
       {!isNew && (
         <>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+            <p className="font-medium text-gray-900">Notas de voz</p>
+
+            {!recording ? (
+              <button
+                onClick={startRecording}
+                disabled={uploadingVoice}
+                className="w-full bg-red-700 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                🎤 {uploadingVoice ? 'Subiendo...' : 'Grabar nota de voz'}
+              </button>
+            ) : (
+              <button
+                onClick={stopRecording}
+                className="w-full bg-gray-900 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 animate-pulse"
+              >
+                ⏹ Detener ({Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')})
+              </button>
+            )}
+
+            {voiceNotes.length > 0 && (
+              <div className="space-y-2 pt-1">
+                {voiceNotes.map((v) => (
+                  <div key={v.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2">
+                    {voiceUrls[v.id] ? (
+                      <audio controls src={voiceUrls[v.id]} className="flex-1 h-10" />
+                    ) : (
+                      <p className="text-xs text-gray-400 flex-1">Cargando...</p>
+                    )}
+                    <button onClick={() => deleteVoiceNote(v)} className="text-xs text-red-500 shrink-0">
+                      Borrar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
             <p className="font-medium text-gray-900">Fotos</p>
             <div className="flex gap-2 flex-wrap">

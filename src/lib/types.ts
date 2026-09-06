@@ -72,6 +72,14 @@ export type TaskPhoto = {
   uploaded_at: string
 }
 
+export type TaskVoiceNote = {
+  id: string
+  task_id: string
+  storage_path: string
+  duration_seconds: number | null
+  created_at: string
+}
+
 export type TaskDependency = {
   task_id: string
   depends_on_task_id: string
