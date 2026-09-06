@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import {
+  DndContext,
+  useDraggable,
+  useDroppable,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { Meeting, MeetingMinute, MeetingItem, MeetingCategory, TaskScore } from '../lib/types'
@@ -317,6 +327,11 @@ export default function MeetingDetail() {
     load()
   }
 
+  const moveItemToCategory = async (itemId: string, categoryId: string | null) => {
+    await supabase.from('meeting_items').update({ category_id: categoryId }).eq('id', itemId)
+    load()
+  }
+
   if (loading) return <p className="text-gray-400 text-sm py-8 text-center">Cargando...</p>
   if (!meeting) return <p className="text-gray-400 text-sm py-8 text-center">Reunión no encontrada.</p>
 
@@ -498,6 +513,7 @@ export default function MeetingDetail() {
             onStartRenameCategory={startRenameCategory}
             onSaveRenameCategory={saveRenameCategory}
             onCancelRenameCategory={() => setEditingCategoryId(null)}
+            onMoveItem={moveItemToCategory}
           />
         ))}
       </div>
@@ -530,18 +546,39 @@ function ItemRowView(props: {
   const { item, taskById } = props
   const task = item.task_id ? taskById[item.task_id] : null
 
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `item:${item.id}`,
+  })
+  const dragStyle = transform
+    ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50, position: 'relative' as const }
+    : undefined
+
+  const grip = (
+    <button
+      {...attributes}
+      {...listeners}
+      className="text-gray-300 shrink-0 px-1 touch-none cursor-grab active:cursor-grabbing"
+      aria-label="Arrastrar"
+    >
+      ⠿
+    </button>
+  )
+
   if (task) {
     return (
-      <div>
-        <Link
-          to={`/task/${task.id}`}
-          className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2"
-        >
-          <span className="text-sm text-gray-800 truncate">{item.content}</span>
-          <span className="text-xs bg-gray-800 text-white rounded-full px-2 py-0.5 shrink-0">
-            {task.status_label}
-          </span>
-        </Link>
+      <div ref={setNodeRef} style={dragStyle} className={isDragging ? 'opacity-60' : ''}>
+        <div className="flex items-center gap-1">
+          {grip}
+          <Link
+            to={`/task/${task.id}`}
+            className="flex-1 flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2"
+          >
+            <span className="text-sm text-gray-800 truncate">{item.content}</span>
+            <span className="text-xs bg-gray-800 text-white rounded-full px-2 py-0.5 shrink-0">
+              {task.status_label}
+            </span>
+          </Link>
+        </div>
         <button onClick={() => props.onUnlink(item)} className="text-xs text-gray-400 mt-1 ml-1">
           Desvincular
         </button>
@@ -551,7 +588,7 @@ function ItemRowView(props: {
 
   if (props.convertingItemId === item.id) {
     return (
-      <div className="border border-gray-200 rounded-lg p-2 space-y-2">
+      <div ref={setNodeRef} style={dragStyle} className="border border-gray-200 rounded-lg p-2 space-y-2">
         <p className="text-sm text-gray-800">{item.content}</p>
         <select
           value={props.convProject}
@@ -609,7 +646,8 @@ function ItemRowView(props: {
   }
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div ref={setNodeRef} style={dragStyle} className={`flex items-center gap-2 flex-wrap ${isDragging ? 'opacity-60' : ''}`}>
+      {grip}
       <input
         type="checkbox"
         checked={item.is_done}
@@ -657,6 +695,7 @@ function CategoryBlock(props: {
 }) {
   const items = props.itemsByCategory[props.node.id] ?? []
   const isEditing = props.editingCategoryId === props.node.id
+  const { setNodeRef, isOver } = useDroppable({ id: `cat:${props.node.id}` })
   return (
     <div className={props.depth > 0 ? 'ml-4 space-y-1.5' : 'space-y-1.5'}>
       {isEditing ? (
@@ -688,9 +727,17 @@ function CategoryBlock(props: {
           </button>
         </div>
       )}
-      {items.map((item) => (
-        <ItemRowView key={item.id} item={item} {...props.itemProps} />
-      ))}
+      <div
+        ref={setNodeRef}
+        className={`space-y-1.5 rounded-lg ${isOver ? 'bg-blue-50 ring-2 ring-blue-200' : ''} ${items.length === 0 ? 'min-h-[28px]' : ''}`}
+      >
+        {items.length === 0 && (
+          <p className="text-xs text-gray-300 italic px-1">Suelta aquí para mover un item</p>
+        )}
+        {items.map((item) => (
+          <ItemRowView key={item.id} item={item} {...props.itemProps} />
+        ))}
+      </div>
       {props.node.children.map((child) => (
         <CategoryBlock
           key={child.id}
@@ -738,8 +785,26 @@ function MinuteCard(props: {
   onStartRenameCategory: (cat: MeetingCategory) => void
   onSaveRenameCategory: () => void
   onCancelRenameCategory: () => void
+  onMoveItem: (itemId: string, categoryId: string | null) => void
 }) {
   const { minute: m } = props
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over) return
+    const itemId = String(active.id).replace(/^item:/, '')
+    const overId = String(over.id)
+    if (overId === 'cat:__none__') {
+      props.onMoveItem(itemId, null)
+    } else if (overId.startsWith('cat:')) {
+      props.onMoveItem(itemId, overId.replace(/^cat:/, ''))
+    }
+  }
 
   const tree = useMemo(() => buildTree(m.categories), [m.categories])
 
@@ -806,31 +871,52 @@ function MinuteCard(props: {
       )}
 
       {(tree.length > 0 || uncategorized.length > 0) && (
-        <div className="space-y-4 pt-2 border-t border-gray-100">
-          {tree.map((node) => (
-            <CategoryBlock
-              key={node.id}
-              node={node}
-              depth={0}
-              itemsByCategory={itemsByCategory}
-              itemProps={itemProps}
-              editingCategoryId={props.editingCategoryId}
-              editingCategoryName={props.editingCategoryName}
-              setEditingCategoryName={props.setEditingCategoryName}
-              onStartRenameCategory={props.onStartRenameCategory}
-              onSaveRenameCategory={props.onSaveRenameCategory}
-              onCancelRenameCategory={props.onCancelRenameCategory}
-            />
-          ))}
-          {uncategorized.length > 0 && (
-            <div className="space-y-1.5">
-              {uncategorized.map((item) => (
-                <ItemRowView key={item.id} item={item} {...itemProps} />
-              ))}
-            </div>
-          )}
-        </div>
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <div className="space-y-4 pt-2 border-t border-gray-100">
+            {tree.map((node) => (
+              <CategoryBlock
+                key={node.id}
+                node={node}
+                depth={0}
+                itemsByCategory={itemsByCategory}
+                itemProps={itemProps}
+                editingCategoryId={props.editingCategoryId}
+                editingCategoryName={props.editingCategoryName}
+                setEditingCategoryName={props.setEditingCategoryName}
+                onStartRenameCategory={props.onStartRenameCategory}
+                onSaveRenameCategory={props.onSaveRenameCategory}
+                onCancelRenameCategory={props.onCancelRenameCategory}
+              />
+            ))}
+            <UncategorizedZone items={uncategorized} itemProps={itemProps} />
+          </div>
+        </DndContext>
       )}
+    </div>
+  )
+}
+
+function UncategorizedZone(props: {
+  items: MeetingItem[]
+  itemProps: Omit<Parameters<typeof ItemRowView>[0], 'item'>
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'cat:__none__' })
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Sin categoría</p>
+      <div
+        ref={setNodeRef}
+        className={`space-y-1.5 rounded-lg ${isOver ? 'bg-blue-50 ring-2 ring-blue-200' : ''} ${
+          props.items.length === 0 ? 'min-h-[28px]' : ''
+        }`}
+      >
+        {props.items.length === 0 && (
+          <p className="text-xs text-gray-300 italic px-1">Suelta aquí para quitar la categoría</p>
+        )}
+        {props.items.map((item) => (
+          <ItemRowView key={item.id} item={item} {...props.itemProps} />
+        ))}
+      </div>
     </div>
   )
 }
