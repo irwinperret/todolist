@@ -197,6 +197,16 @@ export default function TaskDetail() {
     navigate('/')
   }
 
+  const handleDelete = async () => {
+    if (!confirm('¿Borrar esta tarea permanentemente? Esto también borra sus fotos, notas de seguimiento y dependencias. No se puede deshacer.')) return
+    if (photos.length > 0) {
+      await supabase.storage.from('task-photos').remove(photos.map((p) => p.storage_path))
+    }
+    const { error } = await supabase.from('tasks').delete().eq('id', id)
+    if (error) return alert(error.message)
+    navigate('/')
+  }
+
   const searchDependencyCandidates = async (q: string) => {
     setDepSearch(q)
     if (!q.trim()) {
@@ -521,6 +531,10 @@ export default function TaskDetail() {
               {task.archived ? 'Desarchivar' : 'Archivar'}
             </button>
           </div>
+
+          <button onClick={handleDelete} className="w-full border border-red-200 text-red-600 rounded-lg py-3 text-sm">
+            Borrar permanentemente
+          </button>
         </>
       )}
 
