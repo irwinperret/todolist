@@ -2,13 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
-import type { TaskScore } from '../lib/types'
+import type { Person, TaskScore } from '../lib/types'
 import PriorityBadge from '../components/PriorityBadge'
 
 const ME_DEBEN_STATUS_IDS = [3, 5] // Me deben, Recurrente
 const REVISAR_STATUS_ID = 4
 
 type Bucket = 'none' | 'meDeben' | 'revision'
+
+type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 
 export default function Dashboard() {
   const { projects, people, statuses } = useLookups()
@@ -17,6 +19,7 @@ export default function Dashboard() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [bucket, setBucket] = useState<Bucket>('none')
   const [search, setSearch] = useState('')
+  const [contactPerson, setContactPerson] = useState<Person | null>(null)
 
   const [projectFilter, setProjectFilter] = useState('')
   const [personFilter, setPersonFilter] = useState('')
@@ -76,7 +79,70 @@ export default function Dashboard() {
   }, [tasks, projectFilter, personFilter, statusFilter, search, bucket])
 
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
-  const personName = (id: string | null) => people.find((p) => p.id === id)?.name ?? '—'
+  const personForTask = (id: string | null) => people.find((p) => p.id === id) ?? null
+  const personName = (id: string | null) => personForTask(id)?.name ?? '—'
+
+  const isDesktop = () => !/Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent)
+
+  const normalizePhone = (phone: string) => phone.replace(/[^\d+]/g, '').replace(/^\+/, '')
+
+  const showDesktopWarning = (message: string) => {
+    window.alert(message)
+  }
+
+  const handleContactAction = (action: ContactAction) => {
+    if (!contactPerson) return
+
+    const phone = contactPerson.phone ? normalizePhone(contactPerson.phone) : ''
+    const encodedEmail = contactPerson.email ? encodeURIComponent(contactPerson.email) : ''
+
+    if (action === 'email' && contactPerson.email) {
+      window.location.href = `mailto:${encodedEmail}`
+      setContactPerson(null)
+      return
+    }
+
+    if ((action === 'call' || action === 'whatsapp-call' || action === 'whatsapp-message') && !phone) {
+      showDesktopWarning('Este responsable no tiene un número de teléfono registrado.')
+      return
+    }
+
+    if (action === 'call') {
+      if (isDesktop()) {
+        showDesktopWarning('Las llamadas por línea normal no están disponibles desde la computadora. Usa WhatsApp Desktop para llamar.')
+        return
+      }
+      window.location.href = `tel:+${phone}`
+      setContactPerson(null)
+      return
+    }
+
+    if (action === 'whatsapp-message') {
+      window.location.href = `https://wa.me/${phone}`
+      setContactPerson(null)
+      return
+    }
+
+    // WhatsApp calls require the WhatsApp application. On desktop we use
+    // the app protocol so the browser does not fall back to a web call.
+    if (action === 'whatsapp-call') {
+      if (isDesktop()) {
+        let appOpened = false
+        const handleVisibility = () => { appOpened = true }
+        document.addEventListener('visibilitychange', handleVisibility, { once: true })
+        window.location.href = `whatsapp://call?phone=${phone}`
+        window.setTimeout(() => {
+          document.removeEventListener('visibilitychange', handleVisibility)
+          if (!appOpened) {
+            showDesktopWarning('No se pudo abrir WhatsApp Desktop. Para hacer llamadas desde la computadora debes tener la aplicación de WhatsApp Desktop instalada y configurada.')
+          }
+        }, 1800)
+      } else {
+        window.location.href = `whatsapp://call?phone=${phone}`
+      }
+      setContactPerson(null)
+    }
+  }
 
   const emptyMessage =
     bucket === 'meDeben'
@@ -176,57 +242,144 @@ export default function Dashboard() {
       )}
 
       <div className="space-y-2">
-        {filtered.map((t) => (
-          <Link
-            key={t.id}
-            to={`/task/${t.id}`}
-            className="block bg-white border border-gray-200 rounded-xl p-3 active:bg-gray-50"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-medium text-gray-900 truncate">{t.title}</p>
-                {t.subactivity && (
-                  <p className="text-sm text-gray-500 truncate">{t.subactivity}</p>
+        {filtered.map((t) => {
+          const person = personForTask(t.responsible_id)
+          const hasContact = Boolean(person?.email || person?.phone)
+
+          return (
+            <Link
+              key={t.id}
+              to={`/task/${t.id}`}
+              className="block bg-white border border-gray-200 rounded-xl p-3 active:bg-gray-50"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900 truncate">{t.title}</p>
+                  {t.subactivity && (
+                    <p className="text-sm text-gray-500 truncate">{t.subactivity}</p>
+                  )}
+                </div>
+                <div
+                  className="flex items-center gap-1 shrink-0"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+                >
+                  <select
+                    value={t.status_id}
+                    onChange={(e) => updateStatus(t.id, Number(e.target.value))}
+                    className="text-xs bg-amber-100 text-amber-800 font-medium rounded-full pl-2 pr-1 py-0.5 border-0 appearance-none"
+                  >
+                    {statuses.map((s) => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))}
+                  </select>
+                  <PriorityBadge id={t.priority_id} label={t.priority_label} />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2 text-xs text-gray-400 flex-wrap">
+                <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
+                <span>·</span>
+                {hasContact ? (
+                  <button
+                    type="button"
+                    className="text-purple-700 font-medium underline underline-offset-2 hover:text-purple-900"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setContactPerson(person)
+                    }}
+                  >
+                    {person?.name}
+                  </button>
+                ) : (
+                  <span className="text-purple-700 font-medium">{person?.name ?? '—'}</span>
+                )}
+                {t.due_date && (
+                  <>
+                    <span>·</span>
+                    <span>vence {new Date(t.due_date).toLocaleDateString()}</span>
+                  </>
+                )}
+                {t.blocking_count > 0 && (
+                  <>
+                    <span>·</span>
+                    <span className="text-red-500 font-medium">
+                      bloquea {t.blocking_count} {t.blocking_count === 1 ? 'tarea' : 'tareas'}
+                    </span>
+                  </>
                 )}
               </div>
-              <div
-                className="flex items-center gap-1 shrink-0"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
-              >
-                <select
-                  value={t.status_id}
-                  onChange={(e) => updateStatus(t.id, Number(e.target.value))}
-                  className="text-xs bg-amber-100 text-amber-800 font-medium rounded-full pl-2 pr-1 py-0.5 border-0 appearance-none"
-                >
-                  {statuses.map((s) => (
-                    <option key={s.id} value={s.id}>{s.label}</option>
-                  ))}
-                </select>
-                <PriorityBadge id={t.priority_id} label={t.priority_label} />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 mt-2 text-xs text-gray-400 flex-wrap">
-              <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
-              <span>·</span>
-              <span className="text-purple-700 font-medium">{personName(t.responsible_id)}</span>
-              {t.due_date && (
-                <>
-                  <span>·</span>
-                  <span>vence {new Date(t.due_date).toLocaleDateString()}</span>
-                </>
-              )}
-              {t.blocking_count > 0 && (
-                <>
-                  <span>·</span>
-                  <span className="text-red-500 font-medium">
-                    bloquea {t.blocking_count} {t.blocking_count === 1 ? 'tarea' : 'tareas'}
-                  </span>
-                </>
-              )}
-            </div>
-          </Link>
-        ))}
+            </Link>
+          )
+        })}
       </div>
+
+      {contactPerson && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4"
+          onClick={() => setContactPerson(null)}
+        >
+          <div
+            className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-gray-900">Contactar a {contactPerson.name}</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {contactPerson.phone || contactPerson.email || 'Sin datos de contacto'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setContactPerson(null)}
+                className="text-gray-400 text-xl px-2"
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            {contactPerson.phone && (
+              <>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Llamar</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleContactAction('call')}
+                    className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium bg-white"
+                  >
+                    ☎️ Línea normal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleContactAction('whatsapp-call')}
+                    className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium bg-white"
+                  >
+                    📞 WhatsApp
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleContactAction('whatsapp-message')}
+                  className="w-full rounded-lg px-3 py-2.5 text-sm font-medium bg-gray-900 text-white"
+                >
+                  💬 Mensaje por WhatsApp
+                </button>
+              </>
+            )}
+
+            {contactPerson.email && (
+              <button
+                type="button"
+                onClick={() => handleContactAction('email')}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium bg-white"
+              >
+                ✉️ Enviar email
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
