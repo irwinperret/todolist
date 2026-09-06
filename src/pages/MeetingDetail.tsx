@@ -256,6 +256,13 @@ export default function MeetingDetail() {
     load()
   }
 
+  const deleteCategory = async (cat: MeetingCategory) => {
+    if (!confirm(`¿Borrar "${cat.name}"? Si tiene subcategorías, también se borran. Los items que tenía quedan como "Sin categoría", no se pierden. No se puede deshacer.`)) return
+    const { error } = await supabase.from('meeting_categories').delete().eq('id', cat.id)
+    if (error) return alert(error.message)
+    load()
+  }
+
   const addItem = async (minuteId: string, categoryId: string | null, content: string, itemCount: number) => {
     if (!content.trim()) return
     const { error } = await supabase
@@ -432,6 +439,7 @@ export default function MeetingDetail() {
             onStartRenameCategory={startRenameCategory}
             onSaveRenameCategory={saveRenameCategory}
             onCancelRenameCategory={() => setEditingCategoryId(null)}
+            onDeleteCategory={deleteCategory}
             onReorderItems={reorderItems}
             itemActions={itemActions}
           />
@@ -464,6 +472,7 @@ function MinuteCard(props: {
   onStartRenameCategory: (cat: MeetingCategory) => void
   onSaveRenameCategory: () => void
   onCancelRenameCategory: () => void
+  onDeleteCategory: (cat: MeetingCategory) => void
   onReorderItems: (updates: { id: string; category_id: string | null; sort_order: number }[]) => void
   itemActions: ItemActions
 }) {
@@ -619,6 +628,7 @@ function MinuteCard(props: {
                 onSaveRenameCategory={props.onSaveRenameCategory}
                 onCancelRenameCategory={props.onCancelRenameCategory}
                 onRequestAddSub={requestAddSub}
+                onDeleteCategory={props.onDeleteCategory}
               />
             ))}
             <UncategorizedZone items={uncategorized} itemActions={props.itemActions} />
@@ -723,6 +733,7 @@ function CategoryBlock(props: {
   onSaveRenameCategory: () => void
   onCancelRenameCategory: () => void
   onRequestAddSub: (categoryId: string, siblingCount: number) => void
+  onDeleteCategory: (cat: MeetingCategory) => void
 }) {
   const items = props.itemsByCategory[props.node.id] ?? []
   const isEditing = props.editingCategoryId === props.node.id
@@ -750,6 +761,7 @@ function CategoryBlock(props: {
           </p>
           <button onClick={() => props.onStartRenameCategory(props.node)} className="text-xs text-blue-600">Editar</button>
           <button onClick={() => props.onRequestAddSub(props.node.id, props.node.children.length)} className="text-xs text-blue-600">+ Subcategoría</button>
+          <button onClick={() => props.onDeleteCategory(props.node)} className="text-xs text-red-500">Borrar</button>
         </div>
       )}
 
@@ -776,6 +788,7 @@ function CategoryBlock(props: {
           onSaveRenameCategory={props.onSaveRenameCategory}
           onCancelRenameCategory={props.onCancelRenameCategory}
           onRequestAddSub={props.onRequestAddSub}
+          onDeleteCategory={props.onDeleteCategory}
         />
       ))}
     </div>
