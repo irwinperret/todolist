@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { Person, TaskScore } from '../lib/types'
 import { PRIORITY_COLORS } from '../lib/types'
+import { isOverdue } from '../lib/calendar'
 import { getFreedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
 
@@ -385,7 +386,10 @@ export default function Dashboard() {
                 {t.due_date && (
                   <>
                     <span>·</span>
-                    <span>vence {new Date(t.due_date).toLocaleDateString()}</span>
+                    <span className={isOverdue(t.due_date, t.status_id) ? 'text-red-600 font-semibold' : ''}>
+                      {isOverdue(t.due_date, t.status_id) ? 'venció el ' : 'vence '}
+                      {new Date(t.due_date + 'T00:00:00').toLocaleDateString()}
+                    </span>
                   </>
                 )}
                 {t.blocking_count > 0 && (

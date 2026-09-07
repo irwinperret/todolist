@@ -9,6 +9,7 @@ const navItems = [
   { to: '/periodicas', label: 'Periódicas', icon: '🔁' },
   { to: '/archive', label: 'Archivo', icon: '🗄️' },
   { to: '/lists', label: 'Listas', icon: '⚙️' },
+  { to: '/recordatorios', label: 'Recordatorios', icon: '🔔' },
 ]
 
 export default function Layout() {
