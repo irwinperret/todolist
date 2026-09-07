@@ -188,6 +188,7 @@ export default function TaskDetail() {
       comment: task.comment || null,
       due_date: task.due_date || null,
       follow_up_date: task.follow_up_date || null,
+      rutina_frequency: task.status_id === 10 ? (task.rutina_frequency || null) : null,
     }
 
     if (isNew) {
@@ -394,6 +395,42 @@ export default function TaskDetail() {
         <select value={task.responsible_id ?? ''} onChange={(e) => { if (e.target.value === '__new__') setCreatingPerson(true); else setTask({ ...task, responsible_id: e.target.value }) }} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"><option value="">Responsable *</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}<option value="__new__">+ Agregar nuevo responsable...</option></select>
         {creatingPerson && <div className="flex gap-2"><input type="text" placeholder="Nombre del nuevo responsable" value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreatePerson()} className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-base" autoFocus /><button onClick={handleCreatePerson} className="bg-gray-900 text-white rounded-lg px-4 text-sm">Crear</button><button onClick={() => { setCreatingPerson(false); setNewPersonName('') }} className="text-sm text-gray-400 px-2">✕</button></div>}
         <div className="grid grid-cols-2 gap-2"><select value={task.priority_id ?? 4} onChange={(e) => setTask({ ...task, priority_id: Number(e.target.value) })} className="border border-gray-300 rounded-lg px-3 py-2.5 text-base">{priorities.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select><select value={task.status_id ?? 2} onChange={(e) => setTask({ ...task, status_id: Number(e.target.value) })} className="border border-gray-300 rounded-lg px-3 py-2.5 text-base">{statuses.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
+
+        {task.status_id === 10 && (
+          <div className="space-y-2">
+            <label className="text-xs text-gray-500">¿Cada cuánto tiempo es esta rutina?</label>
+            <select
+              value={
+                ['Diaria', 'Semanal', 'Quincenal', 'Mensual', 'Trimestral', 'Semestral', 'Anual'].includes(task.rutina_frequency ?? '')
+                  ? (task.rutina_frequency ?? '')
+                  : task.rutina_frequency
+                  ? 'Otra'
+                  : ''
+              }
+              onChange={(e) => setTask({ ...task, rutina_frequency: e.target.value === 'Otra' ? '' : e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
+            >
+              <option value="">Selecciona frecuencia</option>
+              <option value="Diaria">Diaria</option>
+              <option value="Semanal">Semanal</option>
+              <option value="Quincenal">Quincenal</option>
+              <option value="Mensual">Mensual</option>
+              <option value="Trimestral">Trimestral</option>
+              <option value="Semestral">Semestral</option>
+              <option value="Anual">Anual</option>
+              <option value="Otra">Otra (especificar)</option>
+            </select>
+            {(!['Diaria', 'Semanal', 'Quincenal', 'Mensual', 'Trimestral', 'Semestral', 'Anual', ''].includes(task.rutina_frequency ?? '')) && (
+              <input
+                type="text"
+                placeholder="Ej. cada 3 meses, cada 10 días..."
+                value={task.rutina_frequency ?? ''}
+                onChange={(e) => setTask({ ...task, rutina_frequency: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
+              />
+            )}
+          </div>
+        )}
         <button onClick={() => setShowMore((v) => !v)} className="text-sm text-gray-500 underline">{showMore ? 'Ocultar detalles' : 'Agregar más detalle'}</button>
         {showMore && <div className="space-y-3 pt-2 border-t border-gray-100"><input type="text" placeholder="Subactividad" value={task.subactivity ?? ''} onChange={(e) => setTask({ ...task, subactivity: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><input type="text" placeholder="Disciplina" value={task.discipline ?? ''} onChange={(e) => setTask({ ...task, discipline: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><select value={task.indirect_id ?? ''} onChange={(e) => setTask({ ...task, indirect_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"><option value="">Involucrado (opcional)</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><input type="text" placeholder="Ubicación (opcional)" value={task.location ?? ''} onChange={(e) => setTask({ ...task, location: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><div><label className="text-xs text-gray-500">Fecha entrega</label><input type="date" value={task.due_date ?? ''} onChange={(e) => setTask({ ...task, due_date: e.target.value || null })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /></div><div><label className="text-xs text-gray-500">Seguimiento (recordarme el)</label><input type="date" value={task.follow_up_date ?? ''} onChange={(e) => setTask({ ...task, follow_up_date: e.target.value || null })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /></div><textarea placeholder="Comentario" value={task.comment ?? ''} onChange={(e) => setTask({ ...task, comment: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" rows={3} /></div>}
         <div className="flex gap-2"><button onClick={handleCancel} className="flex-1 border border-red-900 text-red-900 rounded-lg py-3 font-medium">Cancelar</button><button onClick={handleSave} disabled={saving} className="flex-1 bg-gray-900 text-white rounded-lg py-3 font-medium disabled:opacity-50">{saving ? 'Guardando...' : isNew ? 'Crear tarea' : 'Guardar cambios'}</button></div>

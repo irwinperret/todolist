@@ -108,6 +108,12 @@ export default function Periodicas() {
               <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
               <span>·</span>
               <span className="text-purple-700 font-medium">{personName(t.responsible_id)}</span>
+              {t.rutina_frequency && (
+                <>
+                  <span>·</span>
+                  <span className="text-gray-600 font-medium">{t.rutina_frequency}</span>
+                </>
+              )}
               {t.due_date && (
                 <>
                   <span>·</span>
