@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { TaskFollowup, TaskPhoto, TaskScore, TaskLite, TaskVoiceNote } from '../lib/types'
@@ -12,6 +12,9 @@ export default function TaskDetail() {
   const { id } = useParams()
   const isNew = id === 'new' || !id
   const navigate = useNavigate()
+  const location = useLocation()
+  const fromMeetingId = (location.state as { fromMeetingId?: string } | null)?.fromMeetingId
+  const returnTo = fromMeetingId ? `/meetings/${fromMeetingId}` : '/'
   const { projects, people, statuses, priorities, reload: reloadLookups } = useLookups()
 
   const [task, setTask] = useState<Partial<TaskScore>>({
@@ -207,7 +210,7 @@ export default function TaskDetail() {
       setSaving(false)
       if (meetingError) return alert(meetingError.message)
       draftIdRef.current = null
-      navigate('/')
+      navigate(returnTo)
     }
   }
 
@@ -217,7 +220,7 @@ export default function TaskDetail() {
       if (voiceNotes.length > 0) await supabase.storage.from('task-voice-notes').remove(voiceNotes.map((v) => v.storage_path))
       await supabase.from('tasks').delete().eq('id', draftIdRef.current)
     }
-    navigate('/')
+    navigate(returnTo)
   }
 
   const handleAddNote = async () => {
@@ -320,7 +323,7 @@ export default function TaskDetail() {
     if (freed.length > 0) {
       setFreedTasks(freed)
     } else {
-      navigate('/')
+      navigate(returnTo)
     }
   }
 
@@ -346,7 +349,7 @@ export default function TaskDetail() {
 
   const handleArchiveToggle = async () => {
     await supabase.from('tasks').update({ archived: !task.archived }).eq('id', id)
-    navigate('/')
+    navigate(returnTo)
   }
 
   const handleDelete = async () => {
@@ -355,7 +358,7 @@ export default function TaskDetail() {
     if (voiceNotes.length > 0) await supabase.storage.from('task-voice-notes').remove(voiceNotes.map((v) => v.storage_path))
     const { error } = await supabase.from('tasks').delete().eq('id', id)
     if (error) return alert(error.message)
-    navigate('/')
+    navigate(returnTo)
   }
 
   const searchDependencyCandidates = async (q: string) => {
@@ -448,7 +451,7 @@ export default function TaskDetail() {
       <button onClick={handleDelete} className="w-full border border-red-200 text-red-600 rounded-lg py-3 text-sm">Borrar permanentemente</button></>}
 
       {resolutionPrompt && <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-20"><div className="bg-white rounded-t-2xl sm:rounded-2xl p-4 w-full sm:max-w-sm space-y-3"><p className="font-medium">¿Cómo se resolvió?</p><textarea value={resolutionText} onChange={(e) => setResolutionText(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" rows={3} placeholder="Resolución (opcional)" /><div className="flex gap-2"><button onClick={() => setResolutionPrompt(false)} className="flex-1 border border-gray-300 rounded-lg py-2.5 text-sm">Cancelar</button><button onClick={confirmComplete} className="flex-1 bg-green-600 text-white rounded-lg py-2.5 text-sm">Confirmar</button></div></div></div>}
-      {freedTasks && <FreedTasksModal tasks={freedTasks} onClose={() => navigate('/')} />}
+      {freedTasks && <FreedTasksModal tasks={freedTasks} onClose={() => navigate(returnTo)} />}
     </div>
   )
 }

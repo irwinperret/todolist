@@ -48,6 +48,7 @@ function flattenCategories(nodes: CategoryNode[], depth = 0): { id: string; labe
 
 // Shared props every item row and category block needs for the sync/convert/comment actions
 type ItemActions = {
+  meetingId: string
   taskById: Record<string, TaskScore>
   convertingItemId: string | null
   onOpenConvert: (item: MeetingItem, presetStatus?: number) => void
@@ -377,6 +378,7 @@ export default function MeetingDetail() {
   }
 
   const itemActions: ItemActions = {
+    meetingId: id!,
     taskById,
     convertingItemId,
     onOpenConvert: openConvert,
@@ -943,7 +945,7 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
         <div className="flex items-start gap-1">
           {grip}
           <input type="checkbox" checked={item.is_done} onChange={() => actions.onToggleDone(item)} className="w-4 h-4 shrink-0 mt-1" />
-          <Link to={`/task/${task.id}`} className="min-w-0 flex-1 bg-gray-50 rounded-lg px-3 py-2">
+          <Link to={`/task/${task.id}`} state={{ fromMeetingId: actions.meetingId }} className="min-w-0 flex-1 bg-gray-50 rounded-lg px-3 py-2">
             <div className="flex items-start gap-2">
               <span
                 className={`text-sm min-w-0 flex-1 whitespace-normal break-words ${item.is_done ? 'text-gray-400 line-through' : 'text-gray-800'}`}
