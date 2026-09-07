@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import TaskDetail from './pages/TaskDetail'
 import Archive from './pages/Archive'
+import Periodicas from './pages/Periodicas'
 import ManageLists from './pages/ManageLists'
 import Meetings from './pages/Meetings'
 import MeetingDetail from './pages/MeetingDetail'
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="/new" element={<TaskDetail />} />
               <Route path="/task/:id" element={<TaskDetail />} />
               <Route path="/archive" element={<Archive />} />
+              <Route path="/periodicas" element={<Periodicas />} />
               <Route path="/meetings" element={<Meetings />} />
               <Route path="/meetings/:id" element={<MeetingDetail />} />
               <Route path="/lists" element={<ManageLists />} />

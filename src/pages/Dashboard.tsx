@@ -9,6 +9,7 @@ import FreedTasksModal from '../components/FreedTasksModal'
 
 const REVISAR_STATUS_ID = 4
 const LARGO_PLAZO_STATUS_ID = 9
+const RUTINA_STATUS_ID = 10
 
 type Bucket = 'none' | 'meDeben' | 'revision' | 'largoPlazo'
 type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
@@ -120,7 +121,8 @@ export default function Dashboard() {
         if (
           belongsToMeDeben(t) ||
           t.status_id === REVISAR_STATUS_ID ||
-          t.status_id === LARGO_PLAZO_STATUS_ID
+          t.status_id === LARGO_PLAZO_STATUS_ID ||
+          t.status_id === RUTINA_STATUS_ID
         ) return false
       }
 
