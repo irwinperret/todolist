@@ -48,8 +48,13 @@ export default function Dashboard() {
   }, [])
 
   const updateStatus = async (taskId: string, newStatusId: number, blockingCount: number) => {
-    const payload: { status_id: number; resolved_at?: string } =
+    const payload: { status_id: number; resolved_at?: string; rutina_frequency?: string | null } =
       newStatusId === 8 ? { status_id: 8, resolved_at: new Date().toISOString() } : { status_id: newStatusId }
+
+    if (newStatusId === RUTINA_STATUS_ID) {
+      const freq = window.prompt('¿Cada cuánto tiempo es esta rutina? (ej. Semanal, Mensual, cada 3 meses)')
+      payload.rutina_frequency = freq?.trim() || null
+    }
 
     const { error } = await supabase.from('tasks').update(payload).eq('id', taskId)
     if (error) {
