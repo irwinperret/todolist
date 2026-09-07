@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   DndContext,
@@ -13,6 +13,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../lib/supabase'
+import { useFab } from '../lib/FabContext'
 import { useLookups } from '../lib/useLookups'
 import { RichText, RichTextArea, formatRichText, useFormatShortcuts } from '../components/RichText'
 import type { Meeting, MeetingMinute, MeetingItem, MeetingCategory, TaskScore, Project, Person, Status, PriorityLevel } from '../lib/types'
@@ -74,11 +75,13 @@ type ItemActions = {
 
 export default function MeetingDetail() {
   const { id } = useParams()
+  const { setFab } = useFab()
   const { projects, people, statuses, priorities } = useLookups()
   const [meeting, setMeeting] = useState<Meeting | null>(null)
   const [minutes, setMinutes] = useState<MinuteWithData[]>([])
   const [taskById, setTaskById] = useState<Record<string, TaskScore>>({})
   const [loading, setLoading] = useState(true)
+  const addItemTriggers = useRef<Record<string, () => void>>({})
 
   const [creatingFirstMinute, setCreatingFirstMinute] = useState(false)
   const [meetingDate, setMeetingDate] = useState(todayStr())
@@ -184,6 +187,23 @@ export default function MeetingDetail() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  useEffect(() => {
+    setFab({
+      label: 'Agregar item a la minuta',
+      color: 'bg-blue-600',
+      onClick: () => {
+        const firstMinuteId = minutes[0]?.id
+        if (firstMinuteId && addItemTriggers.current[firstMinuteId]) {
+          addItemTriggers.current[firstMinuteId]()
+        } else {
+          setCreatingFirstMinute(true)
+        }
+      },
+    })
+    return () => setFab(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minutes])
 
   const handleCreateFirstMinute = async () => {
     if (!minutaText.trim()) return alert('Escribe algo en la minuta.')
@@ -433,6 +453,7 @@ export default function MeetingDetail() {
             onDeleteMinute={handleDeleteMinute}
             onAddCategory={addCategory}
             onAddItem={addItem}
+            onRegisterAddItemTrigger={(fn) => { addItemTriggers.current[m.id] = fn }}
             editingCategoryId={editingCategoryId}
             editingCategoryName={editingCategoryName}
             setEditingCategoryName={setEditingCategoryName}
@@ -466,6 +487,7 @@ function MinuteCard(props: {
   onDeleteMinute: (id: string) => void
   onAddCategory: (minuteId: string, parentId: string | null, name: string, siblingCount: number) => void
   onAddItem: (minuteId: string, categoryId: string | null, content: string, itemCount: number) => void
+  onRegisterAddItemTrigger: (fn: () => void) => void
   editingCategoryId: string | null
   editingCategoryName: string
   setEditingCategoryName: (v: string) => void
@@ -482,6 +504,11 @@ function MinuteCard(props: {
   const [addingSubTo, setAddingSubTo] = useState<{ id: string; siblingCount: number } | null>(null)
   const [newSubName, setNewSubName] = useState('')
   const [showAddItem, setShowAddItem] = useState(false)
+
+  useEffect(() => {
+    props.onRegisterAddItemTrigger(() => setShowAddItem(true))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [newItemCategory, setNewItemCategory] = useState('')
   const [newItemContent, setNewItemContent] = useState('')
 

@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
+import { useFab } from '../lib/FabContext'
 import OfflineBadge from './OfflineBadge'
 
 const navItems = [
@@ -13,6 +14,7 @@ const navItems = [
 export default function Layout() {
   const { signOut } = useAuth()
   const navigate = useNavigate()
+  const { fab } = useFab()
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -35,9 +37,11 @@ export default function Layout() {
       </main>
 
       <button
-        onClick={() => navigate('/new')}
-        className="fixed bottom-20 right-4 w-14 h-14 rounded-full bg-gray-900 text-white text-2xl shadow-lg flex items-center justify-center"
-        aria-label="Nueva tarea"
+        onClick={fab ? fab.onClick : () => navigate('/new')}
+        className={`fixed bottom-20 right-4 w-14 h-14 rounded-full text-white text-2xl shadow-lg flex items-center justify-center ${
+          fab ? fab.color : 'bg-gray-900'
+        }`}
+        aria-label={fab ? fab.label : 'Nueva tarea'}
       >
         +
       </button>
