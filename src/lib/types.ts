@@ -54,6 +54,7 @@ export type TaskScore = {
   status_weight: number
   due_weight: number
   blocking_count: number
+  pending_dependency_count: number
   dependency_weight: number
   age_weight: number
   priority_score: number

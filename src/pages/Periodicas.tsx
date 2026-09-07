@@ -120,6 +120,14 @@ export default function Periodicas() {
                   <span>vence {new Date(t.due_date).toLocaleDateString()}</span>
                 </>
               )}
+              {t.pending_dependency_count > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="bg-gray-200 text-gray-800 font-medium rounded-full px-2 py-0.5">
+                    Prelada{t.pending_dependency_count > 1 ? ` (${t.pending_dependency_count})` : ''}
+                  </span>
+                </>
+              )}
             </div>
           </Link>
         ))}
