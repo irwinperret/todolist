@@ -20,6 +20,10 @@ export default defineConfig({
         icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' }],
       },
       workbox: {
+        // Take over immediately on update instead of waiting for every tab
+        // to close, so new deploys actually reach the phone promptly.
+        skipWaiting: true,
+        clientsClaim: true,
         // Precache the whole app shell (HTML/JS/CSS) so it opens instantly
         // with no signal, like a native app.
         globPatterns: ['**/*.{js,css,html,svg,ico,png}'],
