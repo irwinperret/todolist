@@ -7,7 +7,6 @@ import { PRIORITY_COLORS } from '../lib/types'
 import { getFreedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
 
-const ME_DEBEN_STATUS_IDS = [3, 5] // Me deben, Recurrente
 const REVISAR_STATUS_ID = 4
 const LARGO_PLAZO_STATUS_ID = 9
 
@@ -99,6 +98,12 @@ export default function Dashboard() {
 
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
   const personForTask = (id: string | null) => people.find((p) => p.id === id) ?? null
+  const ipaPersonId = people.find((p) => p.name.trim().toUpperCase() === 'IPA')?.id
+
+  // "Me deben" includes status Me deben always, and status Recurrente only
+  // when it's not something IPA does themselves (those stay in the normal To Do).
+  const belongsToMeDeben = (t: TaskScore) =>
+    t.status_id === 3 || (t.status_id === 5 && t.responsible_id !== ipaPersonId)
 
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
@@ -106,14 +111,14 @@ export default function Dashboard() {
       // own to-dos: each shown only when its toggle is active, and both
       // hidden from the normal list otherwise.
       if (bucket === 'meDeben') {
-        if (!ME_DEBEN_STATUS_IDS.includes(t.status_id)) return false
+        if (!belongsToMeDeben(t)) return false
       } else if (bucket === 'revision') {
         if (t.status_id !== REVISAR_STATUS_ID) return false
       } else if (bucket === 'largoPlazo') {
         if (t.status_id !== LARGO_PLAZO_STATUS_ID) return false
       } else {
         if (
-          ME_DEBEN_STATUS_IDS.includes(t.status_id) ||
+          belongsToMeDeben(t) ||
           t.status_id === REVISAR_STATUS_ID ||
           t.status_id === LARGO_PLAZO_STATUS_ID
         ) return false
