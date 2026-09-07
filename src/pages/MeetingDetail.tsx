@@ -365,8 +365,22 @@ export default function MeetingDetail() {
   }
 
   const unlinkItem = async (item: MeetingItem) => {
-    if (!confirm('¿Desvincular esta tarea del item? La tarea seguirá existiendo en el To Do, pero dejará de estar sincronizada con esta minuta.')) return
-    await supabase.from('meeting_items').update({ task_id: null }).eq('id', item.id)
+    if (!item.task_id) return
+    if (!confirm('¿Desvincular? Esto borra la tarea del To Do (fotos y notas de voz incluidas), pero el item se mantiene en esta minuta como texto normal. No se puede deshacer.')) return
+
+    const [{ data: photos }, { data: voiceNotes }] = await Promise.all([
+      supabase.from('task_photos').select('storage_path').eq('task_id', item.task_id),
+      supabase.from('task_voice_notes').select('storage_path').eq('task_id', item.task_id),
+    ])
+    if (photos && photos.length > 0) {
+      await supabase.storage.from('task-photos').remove(photos.map((p) => p.storage_path))
+    }
+    if (voiceNotes && voiceNotes.length > 0) {
+      await supabase.storage.from('task-voice-notes').remove(voiceNotes.map((v) => v.storage_path))
+    }
+
+    const { error } = await supabase.from('tasks').delete().eq('id', item.task_id)
+    if (error) return alert(error.message)
     load()
   }
 
@@ -956,7 +970,7 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
           </Link>
         </div>
         {commentEditor}
-        <button onClick={() => actions.onUnlink(item)} className="text-xs text-gray-400 mt-1 ml-7">Desvincular</button>
+        <button onClick={() => actions.onUnlink(item)} className="text-xs text-red-400 mt-1 ml-7">Eliminar tarea</button>
       </div>
     )
   }
