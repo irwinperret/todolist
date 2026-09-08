@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import { PRIORITY_COLORS } from '../lib/types'
+import { isOverdue } from '../lib/calendar'
 
 const RUTINA_STATUS_ID = 10
 
@@ -67,11 +68,19 @@ export default function Periodicas() {
       )}
 
       <div className="space-y-2">
-        {filtered.map((t) => (
+        {filtered.map((t) => {
+          const overdue = isOverdue(t.due_date, t.status_id)
+          const isPrelada = t.pending_dependency_count > 0
+          const cardBg = overdue
+            ? 'bg-red-50 border-red-300'
+            : isPrelada
+            ? 'bg-gray-100 border-gray-300'
+            : 'bg-white border-gray-200'
+          return (
           <Link
             key={t.id}
             to={`/task/${t.id}`}
-            className="block bg-white border border-gray-200 rounded-xl p-3 active:bg-gray-50"
+            className={`block border rounded-xl p-3 active:bg-gray-50 ${cardBg}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -117,20 +126,16 @@ export default function Periodicas() {
               {t.due_date && (
                 <>
                   <span>·</span>
-                  <span>vence {new Date(t.due_date).toLocaleDateString()}</span>
-                </>
-              )}
-              {t.pending_dependency_count > 0 && (
-                <>
-                  <span>·</span>
-                  <span className="bg-gray-200 text-gray-800 font-medium rounded-full px-2 py-0.5">
-                    Prelada{t.pending_dependency_count > 1 ? ` (${t.pending_dependency_count})` : ''}
+                  <span className={overdue ? 'text-red-600 font-semibold' : ''}>
+                    {overdue ? 'venció el ' : 'vence '}
+                    {new Date(t.due_date + 'T00:00:00').toLocaleDateString()}
                   </span>
                 </>
               )}
             </div>
           </Link>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

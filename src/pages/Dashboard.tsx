@@ -322,6 +322,13 @@ export default function Dashboard() {
           const indirectPerson = personForTask(t.indirect_id)
           const hasContact = Boolean(person?.email || person?.phone)
           const isExpanded = expandedTaskId === t.id
+          const overdue = isOverdue(t.due_date, t.status_id)
+          const isPrelada = t.pending_dependency_count > 0
+          const cardBg = overdue
+            ? 'bg-red-50 border-red-300'
+            : isPrelada
+            ? 'bg-gray-100 border-gray-300'
+            : 'bg-white border-gray-200'
 
           return (
             <div
@@ -330,7 +337,7 @@ export default function Dashboard() {
                 if (isExpanded) navigate(`/task/${t.id}`)
                 else setExpandedTaskId(t.id)
               }}
-              className="block bg-white border border-gray-200 rounded-xl p-3 active:bg-gray-50 cursor-pointer"
+              className={`block border rounded-xl p-3 active:bg-gray-50 cursor-pointer ${cardBg}`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -397,14 +404,6 @@ export default function Dashboard() {
                     <span>·</span>
                     <span className="text-red-500 font-medium">
                       bloquea {t.blocking_count} {t.blocking_count === 1 ? 'tarea' : 'tareas'}
-                    </span>
-                  </>
-                )}
-                {t.pending_dependency_count > 0 && (
-                  <>
-                    <span>·</span>
-                    <span className="bg-gray-200 text-gray-800 font-medium rounded-full px-2 py-0.5">
-                      Prelada{t.pending_dependency_count > 1 ? ` (${t.pending_dependency_count})` : ''}
                     </span>
                   </>
                 )}
