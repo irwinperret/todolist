@@ -71,8 +71,11 @@ export default function Periodicas() {
         {filtered.map((t) => {
           const overdue = isOverdue(t.due_date, t.status_id)
           const isPrelada = t.pending_dependency_count > 0
+          const hasUpcomingDueDate = Boolean(t.due_date) && t.status_id !== 8 && !overdue
           const cardBg = overdue
             ? 'bg-red-50 border-red-300'
+            : hasUpcomingDueDate
+            ? 'bg-orange-50 border-orange-300'
             : isPrelada
             ? 'bg-gray-100 border-gray-300'
             : 'bg-white border-gray-200'
