@@ -17,6 +17,7 @@ export default function Recordatorios() {
       .from('task_scores')
       .select('*')
       .or('due_date.not.is.null,follow_up_date.not.is.null')
+      .neq('status_id', 8)
       .eq('archived', false)
       .then(({ data }) => {
         const rows = (data as TaskScore[]) ?? []
