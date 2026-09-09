@@ -105,12 +105,9 @@ export default function Dashboard() {
 
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
   const personForTask = (id: string | null) => people.find((p) => p.id === id) ?? null
-  const ipaPersonId = people.find((p) => p.name.trim().toUpperCase() === 'IPA')?.id
-
-  // "Me deben" includes status Me deben always, and status Recurrente only
-  // when it's not something IPA does themselves (those stay in the normal To Do).
-  const belongsToMeDeben = (t: TaskScore) =>
-    t.status_id === 3 || (t.status_id === 5 && t.responsible_id !== ipaPersonId)
+  // Me deben always includes status Me deben, and now also Recurrente
+  // regardless of who's responsible.
+  const belongsToMeDeben = (t: TaskScore) => t.status_id === 3 || t.status_id === 5
 
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
