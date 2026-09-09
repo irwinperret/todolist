@@ -26,7 +26,7 @@ export default function Archive() {
   const personName = (id: string | null) => people.find((p) => p.id === id)?.name ?? '—'
 
   return (
-    <div className="px-4 pt-4 space-y-2">
+    <div className="min-h-full bg-green-50 px-4 pt-4 space-y-2 pb-8">
       <h2 className="text-sm text-gray-500 mb-2">Completadas y archivadas</h2>
       {loading && <p className="text-gray-400 text-sm py-8 text-center">Cargando...</p>}
       {!loading && tasks.length === 0 && (
