@@ -5,8 +5,8 @@ import OfflineBadge from './OfflineBadge'
 
 const navItems = [
   { to: '/', label: 'To Do', icon: '📋' },
-  { to: '/meetings', label: 'Reuniones', icon: '🗓️' },
   { to: '/periodicas', label: 'Periódicas', icon: '🔁' },
+  { to: '/meetings', label: 'Reuniones', icon: '🗓️' },
   { to: '/archive', label: 'Archivo', icon: '🗄️' },
   { to: '/lists', label: 'Listas', icon: '⚙️' },
   { to: '/recordatorios', label: 'Recordatorios', icon: '🔔' },
