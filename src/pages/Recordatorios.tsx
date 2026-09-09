@@ -48,10 +48,9 @@ export default function Recordatorios() {
         {tasks.map((t) => {
           const overdue = isOverdue(t.due_date, t.status_id)
           const isPostponed = Boolean(t.follow_up_date) && t.follow_up_date! > todayStr()
-          const hasUpcomingDueDate = Boolean(t.due_date) && t.status_id !== 8 && !overdue
           const cardBg = overdue
             ? 'border-red-300 bg-red-50'
-            : hasUpcomingDueDate
+            : isPostponed
             ? 'border-orange-300 bg-orange-50'
             : 'border-gray-200 bg-white'
 
