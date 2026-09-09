@@ -409,7 +409,7 @@ export default function Dashboard() {
                     </span>
                   </>
                 )}
-                {bucket === 'meDeben' && t.status_id !== 3 && t.status_id !== 5 && t.follow_up_date && (
+                {hasFollowUp && (
                   <>
                     <span>·</span>
                     <span className="text-gray-500">
