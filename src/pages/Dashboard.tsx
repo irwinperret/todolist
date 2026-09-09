@@ -330,8 +330,12 @@ export default function Dashboard() {
           const isExpanded = expandedTaskId === t.id
           const overdue = isOverdue(t.due_date, t.status_id)
           const isPrelada = t.pending_dependency_count > 0
+          const isPostponed =
+            bucket === 'meDeben' && t.status_id !== 3 && t.status_id !== 5 && Boolean(t.follow_up_date)
           const cardBg = overdue
             ? 'bg-red-50 border-red-300'
+            : isPostponed
+            ? 'bg-teal-50 border-teal-300'
             : isPrelada
             ? 'bg-gray-100 border-gray-300'
             : 'bg-white border-gray-200'
