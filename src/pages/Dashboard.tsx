@@ -105,9 +105,18 @@ export default function Dashboard() {
 
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
   const personForTask = (id: string | null) => people.find((p) => p.id === id) ?? null
-  // Me deben always includes status Me deben, and now also Recurrente
-  // regardless of who's responsible.
-  const belongsToMeDeben = (t: TaskScore) => t.status_id === 3 || t.status_id === 5
+  // Me deben always includes status Me deben and Recurrente, plus anything
+  // "prelada" with a follow-up date still in the future. Once that date
+  // arrives, the task falls back to whatever its real status says (usually
+  // straight back into the normal To Do).
+  const belongsToMeDeben = (t: TaskScore) => {
+    if (t.status_id === 3 || t.status_id === 5) return true
+    if (t.follow_up_date) {
+      const today = new Date().toISOString().slice(0, 10)
+      if (t.follow_up_date > today) return true
+    }
+    return false
+  }
 
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
@@ -393,6 +402,14 @@ export default function Dashboard() {
                     <span className={isOverdue(t.due_date, t.status_id) ? 'text-red-600 font-semibold' : ''}>
                       {isOverdue(t.due_date, t.status_id) ? 'venció el ' : 'vence '}
                       {new Date(t.due_date + 'T00:00:00').toLocaleDateString()}
+                    </span>
+                  </>
+                )}
+                {bucket === 'meDeben' && t.status_id !== 3 && t.status_id !== 5 && t.follow_up_date && (
+                  <>
+                    <span>·</span>
+                    <span className="text-gray-500">
+                      vuelve el {new Date(t.follow_up_date + 'T00:00:00').toLocaleDateString()}
                     </span>
                   </>
                 )}
