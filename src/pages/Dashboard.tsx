@@ -12,7 +12,7 @@ const REVISAR_STATUS_ID = 4
 const LARGO_PLAZO_STATUS_ID = 9
 const RUTINA_STATUS_ID = 10
 
-type Bucket = 'none' | 'meDeben' | 'revision' | 'largoPlazo'
+type Bucket = 'none' | 'meDeben' | 'revision' | 'largoPlazo' | 'todo'
 type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 
 export default function Dashboard() {
@@ -123,7 +123,9 @@ export default function Dashboard() {
       // "Me deben" and "Pendiente Revisión" are separate buckets from your
       // own to-dos: each shown only when its toggle is active, and both
       // hidden from the normal list otherwise.
-      if (bucket === 'meDeben') {
+      if (bucket === 'todo') {
+        // no status-based filtering at all, just project/person/status/search below
+      } else if (bucket === 'meDeben') {
         if (!belongsToMeDeben(t)) return false
       } else if (bucket === 'revision') {
         if (t.status_id !== REVISAR_STATUS_ID) return false
@@ -279,6 +281,16 @@ export default function Dashboard() {
           }`}
         >
           Largo Plazo
+        </button>
+        <button
+          onClick={() => toggleBucket('todo')}
+          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+            bucket === 'todo'
+              ? 'bg-indigo-100 text-indigo-800 border-indigo-300'
+              : 'bg-white text-indigo-700 border-gray-300'
+          }`}
+        >
+          Todo
         </button>
       </div>
 
