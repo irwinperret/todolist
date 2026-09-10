@@ -337,7 +337,7 @@ export default function Dashboard() {
             : hasFollowUp
             ? 'bg-orange-50 border-orange-300'
             : isPrelada
-            ? 'bg-gray-100 border-gray-300'
+            ? 'bg-gray-200 border-gray-400'
             : 'bg-white border-gray-200'
 
           return (
