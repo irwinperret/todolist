@@ -286,8 +286,8 @@ export default function Dashboard() {
           onClick={() => toggleBucket('todo')}
           className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
             bucket === 'todo'
-              ? 'bg-indigo-100 text-indigo-800 border-indigo-300'
-              : 'bg-white text-indigo-700 border-gray-300'
+              ? 'bg-green-100 text-green-800 border-green-300'
+              : 'bg-white text-green-700 border-gray-300'
           }`}
         >
           Todo
