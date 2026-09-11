@@ -70,7 +70,7 @@ export default function Periodicas() {
       <div className="space-y-2">
         {filtered.map((t) => {
           const overdue = isOverdue(t.due_date, t.status_id)
-          const isPrelada = t.pending_dependency_count > 0
+          const isPrelada = t.pending_dependency_count > 0 || t.status_id === 6
           const today = new Date().toISOString().slice(0, 10)
           const hasFollowUp = Boolean(t.follow_up_date) && t.follow_up_date! > today && t.status_id !== 8
           const cardBg = overdue
