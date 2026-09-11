@@ -75,10 +75,10 @@ export default function Periodicas() {
           const hasFollowUp = Boolean(t.follow_up_date) && t.follow_up_date! > today && t.status_id !== 8
           const cardBg = overdue
             ? 'bg-red-50 border-red-300'
-            : hasFollowUp
-            ? 'bg-orange-50 border-orange-300'
             : isPrelada
             ? 'bg-gray-200 border-gray-400'
+            : hasFollowUp
+            ? 'bg-orange-50 border-orange-300'
             : 'bg-white border-gray-200'
           return (
           <Link
