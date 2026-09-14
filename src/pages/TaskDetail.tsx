@@ -42,7 +42,6 @@ export default function TaskDetail() {
   const [resolutionPrompt, setResolutionPrompt] = useState(false)
   const [resolutionText, setResolutionText] = useState('')
   const commentShortcuts = useFormatShortcuts<HTMLTextAreaElement>(task.comment ?? '', (v) => setTask({ ...task, comment: v }))
-  const titleShortcuts = useFormatShortcuts<HTMLInputElement>(task.title ?? '', (v) => setTask({ ...task, title: v }))
   const newNoteShortcuts = useFormatShortcuts<HTMLInputElement>(newNote, setNewNote)
   const resolutionShortcuts = useFormatShortcuts<HTMLTextAreaElement>(resolutionText, setResolutionText)
   const [freedTasks, setFreedTasks] = useState<FreedTask[] | null>(null)
@@ -398,7 +397,7 @@ export default function TaskDetail() {
   return (
     <div className="px-4 pt-4 pb-8 space-y-4">
       <div className="space-y-3 bg-white border border-gray-200 rounded-xl p-4">
-        <input ref={titleShortcuts.ref} type="text" placeholder="Título *" value={task.title ?? ''} onChange={(e) => setTask({ ...task, title: e.target.value })} onKeyDown={titleShortcuts.onKeyDown} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base font-medium" />
+        <input type="text" placeholder="Título *" value={task.title ?? ''} onChange={(e) => setTask({ ...task, title: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base font-medium" />
         <select value={task.project_id ?? ''} onChange={(e) => setTask({ ...task, project_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"><option value="">Proyecto *</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
         <select value={task.responsible_id ?? ''} onChange={(e) => { if (e.target.value === '__new__') setCreatingPerson(true); else setTask({ ...task, responsible_id: e.target.value }) }} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"><option value="">Responsable *</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}<option value="__new__">+ Agregar nuevo responsable...</option></select>
         {creatingPerson && <div className="flex gap-2"><input type="text" placeholder="Nombre del nuevo responsable" value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreatePerson()} className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-base" autoFocus /><button onClick={handleCreatePerson} className="bg-gray-900 text-white rounded-lg px-4 text-sm">Crear</button><button onClick={() => { setCreatingPerson(false); setNewPersonName('') }} className="text-sm text-gray-400 px-2">✕</button></div>}

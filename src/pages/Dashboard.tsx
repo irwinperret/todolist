@@ -364,7 +364,7 @@ export default function Dashboard() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-medium text-gray-900" dangerouslySetInnerHTML={{ __html: formatRichText(t.title) }} />
+                  <p className="font-medium text-gray-900">{t.title}</p>
                   {t.subactivity && (
                     <p className="text-sm text-gray-500">{t.subactivity}</p>
                   )}
