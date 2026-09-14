@@ -13,6 +13,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../lib/supabase'
+import { copyMeetingExportToClipboard } from '../lib/meetingExport'
 import { useFab } from '../lib/FabContext'
 import { useLookups } from '../lib/useLookups'
 import { RichText, RichTextArea, formatRichText, useFormatShortcuts } from '../components/RichText'
@@ -454,6 +455,7 @@ export default function MeetingDetail() {
           <MinuteCard
             key={m.id}
             minute={m}
+            meetingName={meeting.name}
             isEditing={editingMinuteId === m.id}
             editDate={editDate}
             editAttendees={editAttendees}
@@ -488,6 +490,7 @@ export default function MeetingDetail() {
 
 function MinuteCard(props: {
   minute: MinuteWithData
+  meetingName: string
   isEditing: boolean
   editDate: string
   editAttendees: string
@@ -552,6 +555,22 @@ function MinuteCard(props: {
     return map
   }, [m.items])
   const uncategorized = itemsByCategory['__none__'] ?? []
+  const [exportStatus, setExportStatus] = useState<'idle' | 'copied' | 'copied-plain' | 'failed'>('idle')
+
+  const handleExport = async () => {
+    const result = await copyMeetingExportToClipboard({
+      meetingName: props.meetingName,
+      meetingDate: m.meeting_date,
+      minutaText: m.minuta,
+      attendees: m.attendees,
+      acuerdos: m.acuerdos,
+      categoryTree: tree,
+      itemsByCategory,
+      uncategorized,
+    })
+    setExportStatus(result === 'html' ? 'copied' : result === 'text' ? 'copied-plain' : 'failed')
+    setTimeout(() => setExportStatus('idle'), 3000)
+  }
 
   const topLevelCount = m.categories.filter((c) => !c.parent_id).length
 
@@ -637,10 +656,20 @@ function MinuteCard(props: {
               {new Date(m.meeting_date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
             <div className="flex gap-3">
+              <button onClick={handleExport} className="text-xs text-blue-600">📋 Exportar</button>
               <button onClick={props.onStartEdit} className="text-xs text-blue-600">Editar minuta</button>
               <button onClick={() => props.onDeleteMinute(m.id)} className="text-xs text-red-500">Borrar</button>
             </div>
           </div>
+          {exportStatus === 'copied' && (
+            <p className="text-xs text-green-600">✓ Copiado con formato. Pégalo en tu Google Doc.</p>
+          )}
+          {exportStatus === 'copied-plain' && (
+            <p className="text-xs text-amber-600">✓ Copiado como texto simple (sin negritas).</p>
+          )}
+          {exportStatus === 'failed' && (
+            <p className="text-xs text-red-600">No se pudo copiar. Intenta de nuevo.</p>
+          )}
           {m.attendees && <p className="text-xs text-gray-500"><span className="font-medium">Asistentes:</span> {m.attendees}</p>}
           <RichText text={m.minuta} className="text-sm text-gray-800" />
           {m.acuerdos && (
