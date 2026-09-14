@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import PriorityBadge from '../components/PriorityBadge'
+import { formatRichText } from '../components/RichText'
 
 export default function Archive() {
   const { projects, people } = useLookups()
@@ -55,7 +56,7 @@ export default function Archive() {
             {t.archived && <span className="text-gray-400">(archivado)</span>}
           </div>
           {t.resolution_notes && (
-            <p className="text-xs text-gray-500 mt-1 italic">"{t.resolution_notes}"</p>
+            <p className="text-xs text-gray-500 mt-1 italic" dangerouslySetInnerHTML={{ __html: `"${formatRichText(t.resolution_notes)}"` }} />
           )}
         </Link>
       ))}

@@ -5,6 +5,7 @@ import { useLookups } from '../lib/useLookups'
 import type { Person, TaskScore } from '../lib/types'
 import { PRIORITY_COLORS } from '../lib/types'
 import { isOverdue } from '../lib/calendar'
+import { formatRichText } from '../components/RichText'
 import { getFreedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
 
@@ -465,13 +466,13 @@ export default function Dashboard() {
                   {t.comment && (
                     <div>
                       <p className="text-gray-400">Notas:</p>
-                      <p className="text-gray-800 whitespace-pre-wrap">{t.comment}</p>
+                      <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatRichText(t.comment) }} />
                     </div>
                   )}
                   {t.resolution_notes && (
                     <div>
                       <p className="text-gray-400">Resolución:</p>
-                      <p className="text-gray-800 whitespace-pre-wrap">{t.resolution_notes}</p>
+                      <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatRichText(t.resolution_notes) }} />
                     </div>
                   )}
                   {!person && !indirectPerson && !t.discipline && !t.location && !t.follow_up_date && !t.comment && !t.resolution_notes && (
