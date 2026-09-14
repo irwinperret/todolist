@@ -63,26 +63,39 @@ async function removeQueuedWrite(id: number): Promise<void> {
 // Replays queued writes in the order they were made. Stops at the first
 // failure so we never apply changes out of order; whatever's left stays
 // queued for the next time we're back online.
-export async function flushQueue(): Promise<void> {
-  const pending = await getQueuedWrites()
-  pending.sort((a, b) => a.id - b.id)
-  for (const item of pending) {
-    try {
-      const res = await fetch(item.url, {
-        method: item.method,
-        headers: item.headers,
-        body: item.body ?? undefined,
-      })
-      if (!res.ok && res.status !== 409) {
-        // A real server-side error (not just "already applied"): stop here,
-        // leave it queued, and let the person notice via the pending count.
+let flushing = false
+let lastAttemptAt = 0
+const MIN_RETRY_INTERVAL_MS = 30_000
+
+export async function flushQueue(force = false): Promise<void> {
+  if (flushing) return
+  const now = Date.now()
+  if (!force && now - lastAttemptAt < MIN_RETRY_INTERVAL_MS) return
+  lastAttemptAt = now
+  flushing = true
+  try {
+    const pending = await getQueuedWrites()
+    pending.sort((a, b) => a.id - b.id)
+    for (const item of pending) {
+      try {
+        const res = await fetch(item.url, {
+          method: item.method,
+          headers: item.headers,
+          body: item.body ?? undefined,
+        })
+        if (!res.ok && res.status !== 409) {
+          // A real server-side error (not just "already applied"): stop here,
+          // leave it queued, and let the person notice via the pending count.
+          break
+        }
+        await removeQueuedWrite(item.id)
+      } catch {
+        // Still offline or a transient failure: stop and try again next time.
         break
       }
-      await removeQueuedWrite(item.id)
-    } catch {
-      // Still offline or a transient failure: stop and try again next time.
-      break
     }
+  } finally {
+    flushing = false
   }
 }
 
@@ -102,5 +115,5 @@ async function notifyQueueChanged() {
 // Kick off a flush attempt whenever the browser regains connectivity, and
 // notify listeners so UI (the offline badge) can update its pending count.
 window.addEventListener('online', () => {
-  flushQueue().then(notifyQueueChanged)
+  flushQueue(true).then(notifyQueueChanged)
 })
