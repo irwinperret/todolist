@@ -970,7 +970,7 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
           </Link>
         </div>
         {commentEditor}
-        <button onClick={() => actions.onUnlink(item)} className="text-xs text-red-400 mt-1 ml-7">Eliminar tarea</button>
+        <button onClick={() => actions.onUnlink(item)} className="text-xs text-red-400 mt-1 ml-7">Desvincular</button>
       </div>
     )
   }
