@@ -46,7 +46,7 @@ export default function Recordatorios() {
 
       <div className="space-y-2">
         {tasks.map((t) => {
-          const overdue = isOverdue(t.due_date, t.status_id)
+          const overdue = isOverdue(t.due_date, t.status_id) || isOverdue(t.follow_up_date, t.status_id)
           const isPostponed = Boolean(t.follow_up_date) && t.follow_up_date! > todayStr()
           const cardBg = overdue
             ? 'border-red-300 bg-red-50'
@@ -75,8 +75,9 @@ export default function Recordatorios() {
                   {t.follow_up_date && (
                     <>
                       <span className="text-gray-400">·</span>
-                      <span className={isPostponed ? 'text-orange-700 font-semibold' : 'text-gray-500'}>
-                        vuelve el {new Date(t.follow_up_date + 'T00:00:00').toLocaleDateString()}
+                      <span className={isPostponed ? 'text-orange-700 font-semibold' : isOverdue(t.follow_up_date, t.status_id) ? 'text-red-600 font-semibold' : 'text-gray-500'}>
+                        {isPostponed ? 'vuelve el ' : isOverdue(t.follow_up_date, t.status_id) ? 'venció seguimiento el ' : 'vuelve el '}
+                        {new Date(t.follow_up_date + 'T00:00:00').toLocaleDateString()}
                       </span>
                     </>
                   )}

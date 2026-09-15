@@ -341,7 +341,7 @@ export default function Dashboard() {
           const indirectPerson = personForTask(t.indirect_id)
           const hasContact = Boolean(person?.email || person?.phone)
           const isExpanded = expandedTaskId === t.id
-          const overdue = isOverdue(t.due_date, t.status_id)
+          const overdue = isOverdue(t.due_date, t.status_id) || isOverdue(t.follow_up_date, t.status_id)
           const isPrelada = t.pending_dependency_count > 0 || t.status_id === 6
           const today = new Date().toISOString().slice(0, 10)
           const hasFollowUp = Boolean(t.follow_up_date) && t.follow_up_date! > today && t.status_id !== 8
@@ -427,6 +427,14 @@ export default function Dashboard() {
                     <span>·</span>
                     <span className="text-gray-500">
                       vuelve el {new Date(t.follow_up_date + 'T00:00:00').toLocaleDateString()}
+                    </span>
+                  </>
+                )}
+                {!hasFollowUp && isOverdue(t.follow_up_date, t.status_id) && (
+                  <>
+                    <span>·</span>
+                    <span className="text-red-600 font-semibold">
+                      venció seguimiento el {new Date(t.follow_up_date! + 'T00:00:00').toLocaleDateString()}
                     </span>
                   </>
                 )}
