@@ -45,6 +45,8 @@ export default function TaskDetail() {
   const newNoteShortcuts = useFormatShortcuts<HTMLInputElement>(newNote, setNewNote)
   const resolutionShortcuts = useFormatShortcuts<HTMLTextAreaElement>(resolutionText, setResolutionText)
   const [freedTasks, setFreedTasks] = useState<FreedTask[] | null>(null)
+  const [postponePrompt, setPostponePrompt] = useState(false)
+  const [postponeDate, setPostponeDate] = useState('')
 
   const [dependsOn, setDependsOn] = useState<DependencyLite[]>([])
   const [blocks, setBlocks] = useState<DependencyLite[]>([])
@@ -331,6 +333,27 @@ export default function TaskDetail() {
     }
   }
 
+  const confirmPostpone = async () => {
+    if (!postponeDate) return alert('Elige una fecha.')
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status_id: 6, postponed_until: postponeDate })
+      .eq('id', id)
+    if (error) return alert(error.message)
+    setPostponePrompt(false)
+    setPostponeDate('')
+    load()
+  }
+
+  const cancelPostpone = async () => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status_id: 2, postponed_until: null })
+      .eq('id', id)
+    if (error) return alert(error.message)
+    load()
+  }
+
   const handleReopen = async () => {
     const { error } = await supabase.from('tasks').update({ status_id: 2, resolved_at: null }).eq('id', id)
     if (error) return alert(error.message)
@@ -403,6 +426,19 @@ export default function TaskDetail() {
         {creatingPerson && <div className="flex gap-2"><input type="text" placeholder="Nombre del nuevo responsable" value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreatePerson()} className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-base" autoFocus /><button onClick={handleCreatePerson} className="bg-gray-900 text-white rounded-lg px-4 text-sm">Crear</button><button onClick={() => { setCreatingPerson(false); setNewPersonName('') }} className="text-sm text-gray-400 px-2">✕</button></div>}
         <div className="grid grid-cols-2 gap-2"><select value={task.priority_id ?? 4} onChange={(e) => setTask({ ...task, priority_id: Number(e.target.value) })} className="border border-gray-300 rounded-lg px-3 py-2.5 text-base">{priorities.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select><select value={task.status_id ?? 2} onChange={(e) => setTask({ ...task, status_id: Number(e.target.value) })} className="border border-gray-300 rounded-lg px-3 py-2.5 text-base">{statuses.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
 
+        {!isNew && (
+          task.status_id === 6 && task.postponed_until ? (
+            <div className="flex items-center justify-between bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <span className="text-gray-700">⏸ Pospuesta, vuelve a Ejecutar el {new Date(task.postponed_until + 'T00:00:00').toLocaleDateString()}</span>
+              <button onClick={cancelPostpone} className="text-xs text-blue-600 shrink-0 ml-2">Cancelar</button>
+            </div>
+          ) : (
+            <button onClick={() => setPostponePrompt(true)} className="w-full border border-gray-300 text-gray-700 rounded-lg py-2.5 text-sm">
+              ⏸ Posponer hasta...
+            </button>
+          )
+        )}
+
         {task.status_id === 10 && (
           <div className="space-y-2">
             <label className="text-xs text-gray-500">¿Cada cuánto tiempo es esta rutina?</label>
@@ -455,6 +491,26 @@ export default function TaskDetail() {
       <button onClick={handleDelete} className="w-full border border-red-200 text-red-600 rounded-lg py-3 text-sm">Borrar permanentemente</button></>}
 
       {resolutionPrompt && <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-20"><div className="bg-white rounded-t-2xl sm:rounded-2xl p-4 w-full sm:max-w-sm space-y-3"><p className="font-medium">¿Cómo se resolvió?</p><textarea ref={resolutionShortcuts.ref} value={resolutionText} onChange={(e) => setResolutionText(e.target.value)} onKeyDown={resolutionShortcuts.onKeyDown} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" rows={3} placeholder="Resolución (opcional)" /><div className="flex gap-2"><button onClick={() => setResolutionPrompt(false)} className="flex-1 border border-gray-300 rounded-lg py-2.5 text-sm">Cancelar</button><button onClick={confirmComplete} className="flex-1 bg-green-600 text-white rounded-lg py-2.5 text-sm">Confirmar</button></div></div></div>}
+
+      {postponePrompt && (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-20">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-4 w-full sm:max-w-sm space-y-3">
+            <p className="font-medium">¿Hasta cuándo la pospongo?</p>
+            <p className="text-xs text-gray-500">Se marca como Prelada mientras tanto, y vuelve sola a Ejecutar en esa fecha.</p>
+            <input
+              type="date"
+              value={postponeDate}
+              onChange={(e) => setPostponeDate(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={() => { setPostponePrompt(false); setPostponeDate('') }} className="flex-1 border border-gray-300 rounded-lg py-2.5 text-sm">Cancelar</button>
+              <button onClick={confirmPostpone} className="flex-1 bg-gray-900 text-white rounded-lg py-2.5 text-sm">Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
       {freedTasks && <FreedTasksModal tasks={freedTasks} onClose={() => navigate(returnTo)} />}
     </div>
   )

@@ -5,6 +5,7 @@ import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import { PRIORITY_COLORS } from '../lib/types'
 import { isOverdue } from '../lib/calendar'
+import { reconcilePostponedTasks } from '../lib/dependencies'
 
 const RUTINA_STATUS_ID = 10
 
@@ -14,8 +15,9 @@ export default function Periodicas() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
 
-  const load = () => {
+  const load = async () => {
     setLoading(true)
+    await reconcilePostponedTasks()
     supabase
       .from('task_scores')
       .select('*')

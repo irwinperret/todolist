@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import { googleCalendarUrl, isOverdue } from '../lib/calendar'
+import { reconcilePostponedTasks } from '../lib/dependencies'
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
@@ -13,23 +14,25 @@ export default function Recordatorios() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase
-      .from('task_scores')
-      .select('*')
-      .or('due_date.not.is.null,follow_up_date.not.is.null')
-      .neq('status_id', 8)
-      .eq('archived', false)
-      .then(({ data }) => {
-        const rows = (data as TaskScore[]) ?? []
-        // sort by whichever date is relevant, soonest first
-        rows.sort((a, b) => {
-          const da = a.due_date ?? a.follow_up_date ?? ''
-          const db = b.due_date ?? b.follow_up_date ?? ''
-          return da.localeCompare(db)
+    reconcilePostponedTasks().then(() => {
+      supabase
+        .from('task_scores')
+        .select('*')
+        .or('due_date.not.is.null,follow_up_date.not.is.null')
+        .neq('status_id', 8)
+        .eq('archived', false)
+        .then(({ data }) => {
+          const rows = (data as TaskScore[]) ?? []
+          // sort by whichever date is relevant, soonest first
+          rows.sort((a, b) => {
+            const da = a.due_date ?? a.follow_up_date ?? ''
+            const db = b.due_date ?? b.follow_up_date ?? ''
+            return da.localeCompare(db)
+          })
+          setTasks(rows)
+          setLoading(false)
         })
-        setTasks(rows)
-        setLoading(false)
-      })
+    })
   }, [])
 
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'

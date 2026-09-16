@@ -6,7 +6,7 @@ import type { Person, TaskScore } from '../lib/types'
 import { PRIORITY_COLORS } from '../lib/types'
 import { isOverdue } from '../lib/calendar'
 import { formatRichText } from '../components/RichText'
-import { getFreedTasks, type FreedTask } from '../lib/dependencies'
+import { getFreedTasks, reconcilePostponedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
 
 const REVISAR_STATUS_ID = 4
@@ -34,6 +34,7 @@ export default function Dashboard() {
 
   const load = async () => {
     setLoading(true)
+    await reconcilePostponedTasks()
     const { data, error } = await supabase
       .from('task_scores')
       .select('*')
