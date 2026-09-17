@@ -6,8 +6,6 @@ import type { TaskScore } from '../lib/types'
 import { googleCalendarUrl, isOverdue } from '../lib/calendar'
 import { reconcilePostponedTasks } from '../lib/dependencies'
 
-const todayStr = () => new Date().toISOString().slice(0, 10)
-
 export default function Recordatorios() {
   const { projects, people } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
@@ -18,16 +16,12 @@ export default function Recordatorios() {
       supabase
         .from('task_scores')
         .select('*')
-        .or('due_date.not.is.null,follow_up_date.not.is.null')
+        .not('due_date', 'is', null)
         .neq('status_id', 8)
         .eq('archived', false)
         .then(({ data }) => {
           const rows = (data as TaskScore[]) ?? []
-          rows.sort((a, b) => {
-            const da = a.due_date ?? a.follow_up_date ?? ''
-            const db = b.due_date ?? b.follow_up_date ?? ''
-            return da.localeCompare(db)
-          })
+          rows.sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
           setTasks(rows)
           setLoading(false)
         })
@@ -39,7 +33,7 @@ export default function Recordatorios() {
 
   return (
     <div className="px-4 pt-4 space-y-2">
-      <h2 className="text-sm text-gray-500 mb-2">Fechas de entrega y actividades pospuestas</h2>
+      <h2 className="text-sm text-gray-500 mb-2">Fechas de entrega</h2>
 
       {loading && <p className="text-gray-400 text-sm py-8 text-center">Cargando...</p>}
       {!loading && tasks.length === 0 && (
@@ -48,31 +42,8 @@ export default function Recordatorios() {
 
       <div className="space-y-2">
         {tasks.map((t) => {
-          const overdue = isOverdue(t.due_date, t.status_id) || isOverdue(t.follow_up_date, t.status_id)
-          const isPostponed = Boolean(t.follow_up_date) && t.follow_up_date! > todayStr()
-          const cardBg = overdue
-            ? 'border-red-300 bg-red-50'
-            : isPostponed
-            ? 'border-orange-300 bg-orange-50'
-            : 'border-gray-200 bg-white'
-
-          const dueCalendarUrl = t.due_date
-            ? googleCalendarUrl({
-                title: t.title,
-                dueDate: t.due_date,
-                details: t.comment,
-                location: t.location,
-              })
-            : null
-
-          const followUpCalendarUrl = t.follow_up_date
-            ? googleCalendarUrl({
-                title: `${t.title} (seguimiento)`,
-                dueDate: t.follow_up_date,
-                details: t.comment,
-                location: t.location,
-              })
-            : null
+          const overdue = isOverdue(t.due_date, t.status_id)
+          const cardBg = overdue ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'
 
           return (
             <div key={t.id} className={`border rounded-xl p-3 ${cardBg}`}>
@@ -92,21 +63,22 @@ export default function Recordatorios() {
                       </span>
                     </>
                   )}
-                  {t.follow_up_date && (
-                    <>
-                      <span className="text-gray-400">·</span>
-                      <span className={isPostponed ? 'text-orange-700 font-semibold' : isOverdue(t.follow_up_date, t.status_id) ? 'text-red-600 font-semibold' : 'text-gray-500'}>
-                        {isPostponed ? 'vuelve el ' : isOverdue(t.follow_up_date, t.status_id) ? 'venció seguimiento el ' : 'vuelve el '}
-                        {new Date(t.follow_up_date + 'T00:00:00').toLocaleDateString()}
-                      </span>
-                    </>
-                  )}
                 </div>
               </Link>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {dueCalendarUrl && <a href={dueCalendarUrl} target="_blank" rel="noopener noreferrer" className="inline-block text-xs bg-blue-50 text-blue-700 rounded-full px-3 py-1">📅 Agregar entrega a Google Calendar</a>}
-                {followUpCalendarUrl && <a href={followUpCalendarUrl} target="_blank" rel="noopener noreferrer" className="inline-block text-xs bg-orange-50 text-orange-700 rounded-full px-3 py-1">📅 Agregar seguimiento a Google Calendar</a>}
-              </div>
+              {t.due_date && (
+                <a href={googleCalendarUrl({
+                    title: t.title,
+                    dueDate: t.due_date,
+                    details: t.comment,
+                    location: t.location,
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block mt-2 text-xs bg-blue-50 text-blue-700 rounded-full px-3 py-1"
+                >
+                  📅 Agregar a Google Calendar
+                </a>
+              )}
             </div>
           )
         })}
