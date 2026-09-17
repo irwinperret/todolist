@@ -992,9 +992,14 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
               <span className="text-xs bg-gray-800 text-white rounded-full px-2 py-0.5 shrink-0">{task.status_label}</span>
             </div>
           </Link>
+          <button
+            onClick={() => actions.onUnlink(item)}
+            className="text-xs text-red-400 shrink-0 self-center px-1"
+          >
+            Desvincular
+          </button>
         </div>
         {commentEditor}
-        <button onClick={() => actions.onUnlink(item)} className="text-xs text-red-400 mt-1 ml-7">Desvincular</button>
       </div>
     )
   }
@@ -1044,6 +1049,7 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
           contentView
         )}
       </div>
+      {commentEditor}
       <div className="flex gap-1 flex-wrap justify-end ml-7">
         {!item.is_long_term && (
           <>
@@ -1061,7 +1067,6 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
         </button>
         <button onClick={() => actions.onDeleteItem(item)} className="text-xs text-red-400 px-1">✕</button>
       </div>
-      {commentEditor}
     </div>
   )
 }
