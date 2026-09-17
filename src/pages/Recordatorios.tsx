@@ -86,21 +86,38 @@ export default function Recordatorios() {
                   )}
                 </div>
               </Link>
-              {t.due_date && (
-                <a
-                  href={googleCalendarUrl({
-                    title: t.title,
-                    dueDate: t.due_date,
-                    details: t.comment,
-                    location: t.location,
-                  })}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block mt-2 text-xs bg-blue-50 text-blue-700 rounded-full px-3 py-1"
-                >
-                  📅 Agregar a Google Calendar
-                </a>
-              )}
+              <div className="flex flex-wrap gap-2 mt-2">
+                {t.due_date && (
+                  
+                    href={googleCalendarUrl({
+                      title: t.title,
+                      dueDate: t.due_date,
+                      details: t.comment,
+                      location: t.location,
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-xs bg-blue-50 text-blue-700 rounded-full px-3 py-1"
+                  >
+                    📅 Agregar entrega a Google Calendar
+                  </a>
+                )}
+                {t.follow_up_date && (
+                  
+                    href={googleCalendarUrl({
+                      title: `${t.title} (seguimiento)`,
+                      dueDate: t.follow_up_date,
+                      details: t.comment,
+                      location: t.location,
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-xs bg-orange-50 text-orange-700 rounded-full px-3 py-1"
+                  >
+                    📅 Agregar seguimiento a Google Calendar
+                  </a>
+                )}
+              </div>
             </div>
           )
         })}
