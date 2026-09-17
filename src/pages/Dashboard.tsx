@@ -108,14 +108,14 @@ export default function Dashboard() {
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
   const personForTask = (id: string | null) => people.find((p) => p.id === id) ?? null
   // Me deben always includes status Me deben and Recurrente, plus anything
-  // "prelada" with a follow-up date still in the future. Once that date
-  // arrives, the task falls back to whatever its real status says (usually
-  // straight back into the normal To Do).
+  // with a due date still in the future. Once that date arrives, the task
+  // falls back to whatever its real status says (usually straight back into
+  // the normal To Do).
   const belongsToMeDeben = (t: TaskScore) => {
     if (t.status_id === 3 || t.status_id === 5) return true
-    if (t.follow_up_date) {
+    if (t.due_date) {
       const today = new Date().toISOString().slice(0, 10)
-      if (t.follow_up_date > today) return true
+      if (t.due_date > today) return true
     }
     return false
   }
@@ -342,10 +342,10 @@ export default function Dashboard() {
           const indirectPerson = personForTask(t.indirect_id)
           const hasContact = Boolean(person?.email || person?.phone)
           const isExpanded = expandedTaskId === t.id
-          const overdue = isOverdue(t.due_date, t.status_id) || isOverdue(t.follow_up_date, t.status_id)
+          const overdue = isOverdue(t.due_date, t.status_id)
           const isPrelada = t.pending_dependency_count > 0 || t.status_id === 6
           const today = new Date().toISOString().slice(0, 10)
-          const hasFollowUp = Boolean(t.follow_up_date) && t.follow_up_date! > today && t.status_id !== 8
+          const hasFollowUp = Boolean(t.due_date) && t.due_date! > today && t.status_id !== 8
           const cardBg = overdue
             ? 'bg-red-50 border-red-300'
             : isPrelada
@@ -417,25 +417,9 @@ export default function Dashboard() {
                 {t.due_date && (
                   <>
                     <span>·</span>
-                    <span className={isOverdue(t.due_date, t.status_id) ? 'text-red-600 font-semibold' : ''}>
-                      {isOverdue(t.due_date, t.status_id) ? 'venció el ' : 'vence '}
+                    <span className={overdue ? 'text-red-600 font-semibold' : ''}>
+                      {overdue ? 'venció el ' : 'vence '}
                       {new Date(t.due_date + 'T00:00:00').toLocaleDateString()}
-                    </span>
-                  </>
-                )}
-                {hasFollowUp && (
-                  <>
-                    <span>·</span>
-                    <span className="text-gray-500">
-                      vuelve el {new Date(t.follow_up_date + 'T00:00:00').toLocaleDateString()}
-                    </span>
-                  </>
-                )}
-                {!hasFollowUp && isOverdue(t.follow_up_date, t.status_id) && (
-                  <>
-                    <span>·</span>
-                    <span className="text-red-600 font-semibold">
-                      venció seguimiento el {new Date(t.follow_up_date! + 'T00:00:00').toLocaleDateString()}
                     </span>
                   </>
                 )}
@@ -469,9 +453,6 @@ export default function Dashboard() {
                   {t.location && (
                     <p><span className="text-gray-400">Ubicación: </span><span className="text-gray-800">{t.location}</span></p>
                   )}
-                  {t.follow_up_date && (
-                    <p><span className="text-gray-400">Seguimiento: </span><span className="text-gray-800">{new Date(t.follow_up_date).toLocaleDateString()}</span></p>
-                  )}
                   {t.comment && (
                     <div>
                       <p className="text-gray-400">Notas:</p>
@@ -484,7 +465,7 @@ export default function Dashboard() {
                       <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatRichText(t.resolution_notes) }} />
                     </div>
                   )}
-                  {!person && !indirectPerson && !t.discipline && !t.location && !t.follow_up_date && !t.comment && !t.resolution_notes && (
+                  {!person && !indirectPerson && !t.discipline && !t.location && !t.comment && !t.resolution_notes && (
                     <p className="text-gray-400 italic">Sin más detalle agregado.</p>
                   )}
                   <p className="text-xs text-gray-300 pt-1">Toca de nuevo para editar</p>
