@@ -43,7 +43,12 @@ export default function Recordatorios() {
       <div className="space-y-2">
         {tasks.map((t) => {
           const overdue = isOverdue(t.due_date, t.status_id)
-          const cardBg = overdue ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'
+          const isPrelada = t.pending_dependency_count > 0 || t.status_id === 6
+          const cardBg = overdue
+            ? 'border-red-300 bg-red-50'
+            : isPrelada
+            ? 'border-gray-400 bg-gray-200'
+            : 'border-gray-200 bg-white'
 
           return (
             <div key={t.id} className={`border rounded-xl p-3 ${cardBg}`}>
