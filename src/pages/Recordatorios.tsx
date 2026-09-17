@@ -23,7 +23,6 @@ export default function Recordatorios() {
         .eq('archived', false)
         .then(({ data }) => {
           const rows = (data as TaskScore[]) ?? []
-          // sort by whichever date is relevant, soonest first
           rows.sort((a, b) => {
             const da = a.due_date ?? a.follow_up_date ?? ''
             const db = b.due_date ?? b.follow_up_date ?? ''
@@ -57,6 +56,24 @@ export default function Recordatorios() {
             ? 'border-orange-300 bg-orange-50'
             : 'border-gray-200 bg-white'
 
+          const dueCalendarUrl = t.due_date
+            ? googleCalendarUrl({
+                title: t.title,
+                dueDate: t.due_date,
+                details: t.comment,
+                location: t.location,
+              })
+            : null
+
+          const followUpCalendarUrl = t.follow_up_date
+            ? googleCalendarUrl({
+                title: `${t.title} (seguimiento)`,
+                dueDate: t.follow_up_date,
+                details: t.comment,
+                location: t.location,
+              })
+            : null
+
           return (
             <div key={t.id} className={`border rounded-xl p-3 ${cardBg}`}>
               <Link to={`/task/${t.id}`} className="block">
@@ -87,36 +104,8 @@ export default function Recordatorios() {
                 </div>
               </Link>
               <div className="flex flex-wrap gap-2 mt-2">
-                {t.due_date && (
-                  
-                    href={googleCalendarUrl({
-                      title: t.title,
-                      dueDate: t.due_date,
-                      details: t.comment,
-                      location: t.location,
-                    })}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block text-xs bg-blue-50 text-blue-700 rounded-full px-3 py-1"
-                  >
-                    📅 Agregar entrega a Google Calendar
-                  </a>
-                )}
-                {t.follow_up_date && (
-                  
-                    href={googleCalendarUrl({
-                      title: `${t.title} (seguimiento)`,
-                      dueDate: t.follow_up_date,
-                      details: t.comment,
-                      location: t.location,
-                    })}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block text-xs bg-orange-50 text-orange-700 rounded-full px-3 py-1"
-                  >
-                    📅 Agregar seguimiento a Google Calendar
-                  </a>
-                )}
+                {dueCalendarUrl && <a href={dueCalendarUrl} target="_blank" rel="noopener noreferrer" className="inline-block text-xs bg-blue-50 text-blue-700 rounded-full px-3 py-1">📅 Agregar entrega a Google Calendar</a>}
+                {followUpCalendarUrl && <a href={followUpCalendarUrl} target="_blank" rel="noopener noreferrer" className="inline-block text-xs bg-orange-50 text-orange-700 rounded-full px-3 py-1">📅 Agregar seguimiento a Google Calendar</a>}
               </div>
             </div>
           )
