@@ -57,7 +57,23 @@ export function useFormatShortcuts<T extends HTMLInputElement | HTMLTextAreaElem
     else if (e.shiftKey && key === 'x') { e.preventDefault(); wrapSelection('~~') }
   }
 
-  return { ref, onKeyDown }
+  // Exposed so a tappable toolbar can trigger the same formatting on mobile,
+  // where there's no physical keyboard to fire the Ctrl/Cmd shortcuts.
+  return { ref, onKeyDown, bold: () => wrapSelection('**'), italic: () => wrapSelection('*'), underline: () => wrapSelection('__') }
+}
+
+// Small tap targets for bold/italic/underline, for touchscreens where the
+// Ctrl/Cmd keyboard shortcuts above can't be pressed. preventDefault on
+// mousedown keeps the tap from stealing focus away from the field first.
+export function FormatToolbar({ bold, italic, underline }: { bold: () => void; italic: () => void; underline: () => void }) {
+  const btnClass = 'w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 text-sm text-gray-600 bg-white active:bg-gray-100'
+  return (
+    <div className="flex gap-1.5">
+      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={bold} className={`${btnClass} font-bold`} aria-label="Negrita">B</button>
+      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={italic} className={`${btnClass} italic`} aria-label="Cursiva">I</button>
+      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={underline} className={`${btnClass} underline`} aria-label="Subrayado">U</button>
+    </div>
+  )
 }
 
 export function RichTextArea(props: {
@@ -67,17 +83,20 @@ export function RichTextArea(props: {
   rows?: number
   className?: string
 }) {
-  const { ref, onKeyDown } = useFormatShortcuts<HTMLTextAreaElement>(props.value, props.onChange)
+  const { ref, onKeyDown, bold, italic, underline } = useFormatShortcuts<HTMLTextAreaElement>(props.value, props.onChange)
 
   return (
-    <textarea
-      ref={ref}
-      value={props.value}
-      onChange={(e) => props.onChange(e.target.value)}
-      onKeyDown={onKeyDown}
-      placeholder={props.placeholder}
-      rows={props.rows ?? 4}
-      className={props.className ?? 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base'}
-    />
+    <div className="space-y-1.5">
+      <textarea
+        ref={ref}
+        value={props.value}
+        onChange={(e) => props.onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={props.placeholder}
+        rows={props.rows ?? 4}
+        className={props.className ?? 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base'}
+      />
+      <FormatToolbar bold={bold} italic={italic} underline={underline} />
+    </div>
   )
 }
