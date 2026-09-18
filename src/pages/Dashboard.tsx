@@ -272,7 +272,7 @@ export default function Dashboard() {
               : 'bg-white text-red-800 border-gray-300'
           }`}
         >
-          Me deben/Prelada
+          Me deben/ Prelada
         </button>
         <button
           onClick={() => toggleBucket('largoPlazo')}
