@@ -6,6 +6,7 @@ import type { TaskScore } from '../lib/types'
 import { PRIORITY_COLORS } from '../lib/types'
 import { isOverdue } from '../lib/calendar'
 import { reconcilePostponedTasks } from '../lib/dependencies'
+import { formatRichText } from '../components/RichText'
 
 const RUTINA_STATUS_ID = 10
 
@@ -90,7 +91,7 @@ export default function Periodicas() {
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-medium text-gray-900">{t.title}</p>
+                <p className="text-gray-900" dangerouslySetInnerHTML={{ __html: formatRichText(t.title) }} />
                 {t.subactivity && <p className="text-sm text-gray-500">{t.subactivity}</p>}
               </div>
 
