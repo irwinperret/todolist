@@ -5,6 +5,7 @@ import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import { googleCalendarUrl, isOverdue } from '../lib/calendar'
 import { reconcilePostponedTasks } from '../lib/dependencies'
+import { formatRichText } from '../components/RichText'
 
 export default function Recordatorios() {
   const { projects, people } = useLookups()
@@ -53,7 +54,7 @@ export default function Recordatorios() {
           return (
             <div key={t.id} className={`border rounded-xl p-3 ${cardBg}`}>
               <Link to={`/task/${t.id}`} className="block">
-                <p className="font-medium text-gray-900">{t.title}</p>
+                <p className="text-gray-900" dangerouslySetInnerHTML={{ __html: formatRichText(t.title) }} />
                 {t.subactivity && <p className="text-sm text-gray-500">{t.subactivity}</p>}
                 <div className="flex items-center gap-2 mt-2 text-xs flex-wrap">
                   <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
