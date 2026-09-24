@@ -363,7 +363,7 @@ export default function Dashboard() {
               }}
               className={`block border rounded-xl p-3 active:bg-gray-50 cursor-pointer ${cardBg}`}
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-2">
                 <div className="min-w-0">
                   <p className="text-gray-900" dangerouslySetInnerHTML={{ __html: formatRichText(t.title) }} />
                   {t.subactivity && (
@@ -372,7 +372,7 @@ export default function Dashboard() {
                 </div>
 
                 <div
-                  className="flex items-center gap-1 shrink-0"
+                  className="flex items-center gap-1 shrink-0 justify-end"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
                 >
                   <select

@@ -938,7 +938,7 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
         <button
           type="button"
           onClick={() => setEditingComment(true)}
-          className="text-left text-xs text-purple-700 hover:text-purple-900"
+          className={`text-left text-xs hover:text-purple-900 ${item.is_done ? 'text-purple-300' : 'text-purple-700'}`}
           title="Editar comentario"
           dangerouslySetInnerHTML={{ __html: formatRichText(displayedComment) }}
         />
