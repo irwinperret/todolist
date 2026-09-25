@@ -108,11 +108,12 @@ export default function Dashboard() {
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
   const personForTask = (id: string | null) => people.find((p) => p.id === id) ?? null
   // Me deben always includes status Me deben and Recurrente, plus anything
-  // with a due date still in the future. Once that date arrives, the task
-  // falls back to whatever its real status says (usually straight back into
-  // the normal To Do).
+  // with a due date still in the future, plus anything postponed (Prelada)
+  // that hasn't reached its postponed-until date yet. Once that date
+  // arrives, reconcilePostponedTasks flips it back to Ejecutar and it falls
+  // back to whatever its real status says (usually straight back into IPA).
   const belongsToMeDeben = (t: TaskScore) => {
-    if (t.status_id === 3 || t.status_id === 5) return true
+    if (t.status_id === 3 || t.status_id === 5 || t.status_id === 6) return true
     if (t.due_date) {
       const today = new Date().toISOString().slice(0, 10)
       if (t.due_date > today) return true
