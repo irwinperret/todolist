@@ -4,11 +4,12 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import { googleCalendarUrl, isOverdue } from '../lib/calendar'
+import { getTaskCardStyle } from '../lib/taskCardStyle'
 import { reconcilePostponedTasks } from '../lib/dependencies'
 import { formatRichText } from '../components/RichText'
 
 export default function Recordatorios() {
-  const { projects, people } = useLookups()
+  const { projectName, personName } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -29,9 +30,6 @@ export default function Recordatorios() {
     })
   }, [])
 
-  const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
-  const personName = (id: string | null) => people.find((p) => p.id === id)?.name ?? '—'
-
   return (
     <div className="px-4 pt-4 space-y-2">
       <h2 className="text-sm text-gray-500 mb-2">Fechas de entrega</h2>
@@ -44,12 +42,7 @@ export default function Recordatorios() {
       <div className="space-y-2">
         {tasks.map((t) => {
           const overdue = isOverdue(t.due_date, t.status_id)
-          const isPrelada = t.pending_dependency_count > 0 || t.status_id === 6
-          const cardBg = overdue
-            ? 'border-red-300 bg-red-50'
-            : isPrelada
-            ? 'border-gray-400 bg-gray-200'
-            : 'border-gray-200 bg-white'
+          const cardBg = getTaskCardStyle(t, { includeFollowUp: false })
 
           return (
             <div key={t.id} className={`border rounded-xl p-3 ${cardBg}`}>

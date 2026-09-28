@@ -7,7 +7,7 @@ import PriorityBadge from '../components/PriorityBadge'
 import { formatRichText } from '../components/RichText'
 
 export default function Archive() {
-  const { projects, people } = useLookups()
+  const { projectName, personName } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -22,9 +22,6 @@ export default function Archive() {
         setLoading(false)
       })
   }, [])
-
-  const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
-  const personName = (id: string | null) => people.find((p) => p.id === id)?.name ?? '—'
 
   return (
     <div className="min-h-screen bg-green-50 px-4 pt-4 space-y-2 pb-8">

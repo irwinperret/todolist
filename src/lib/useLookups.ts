@@ -28,5 +28,11 @@ export function useLookups() {
     reload()
   }, [])
 
-  return { projects, people, statuses, priorities, loading, reload }
+  // Shared name-lookup helpers so every page that lists tasks doesn't have
+  // to redefine the same `find(...)?.name ?? '—'` closures.
+  const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
+  const personById = (id: string | null) => people.find((p) => p.id === id) ?? null
+  const personName = (id: string | null) => personById(id)?.name ?? '—'
+
+  return { projects, people, statuses, priorities, loading, reload, projectName, personName, personById }
 }

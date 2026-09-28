@@ -5,13 +5,14 @@ import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import { PRIORITY_COLORS } from '../lib/types'
 import { isOverdue } from '../lib/calendar'
+import { getTaskCardStyle } from '../lib/taskCardStyle'
 import { reconcilePostponedTasks } from '../lib/dependencies'
 import { formatRichText } from '../components/RichText'
 
 const RUTINA_STATUS_ID = 10
 
 export default function Periodicas() {
-  const { projects, people, statuses, priorities } = useLookups()
+  const { statuses, priorities, projectName, personName } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -34,9 +35,6 @@ export default function Periodicas() {
   useEffect(() => {
     load()
   }, [])
-
-  const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
-  const personName = (id: string | null) => people.find((p) => p.id === id)?.name ?? '—'
 
   const updateStatus = async (taskId: string, newStatusId: number) => {
     await supabase.from('tasks').update({ status_id: newStatusId }).eq('id', taskId)
@@ -73,16 +71,7 @@ export default function Periodicas() {
       <div className="space-y-2">
         {filtered.map((t) => {
           const overdue = isOverdue(t.due_date, t.status_id)
-          const isPrelada = t.pending_dependency_count > 0 || t.status_id === 6
-          const today = new Date().toISOString().slice(0, 10)
-          const hasFollowUp = Boolean(t.due_date) && t.due_date! > today && t.status_id !== 8
-          const cardBg = overdue
-            ? 'bg-red-50 border-red-300'
-            : isPrelada
-            ? 'bg-gray-200 border-gray-400'
-            : hasFollowUp
-            ? 'bg-orange-50 border-orange-300'
-            : 'bg-white border-gray-200'
+          const cardBg = getTaskCardStyle(t)
           return (
           <Link
             key={t.id}

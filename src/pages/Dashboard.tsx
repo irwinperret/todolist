@@ -5,6 +5,7 @@ import { useLookups } from '../lib/useLookups'
 import type { Person, TaskScore } from '../lib/types'
 import { PRIORITY_COLORS } from '../lib/types'
 import { isOverdue } from '../lib/calendar'
+import { getTaskCardStyle } from '../lib/taskCardStyle'
 import { formatRichText } from '../components/RichText'
 import { getFreedTasks, reconcilePostponedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
@@ -19,7 +20,7 @@ type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { projects, people, statuses, priorities } = useLookups()
+  const { projects, people, statuses, priorities, projectName, personById } = useLookups()
   const { notifyError } = useFeedback()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
@@ -107,8 +108,6 @@ export default function Dashboard() {
     setBucket((current) => (current === b ? 'none' : b))
   }
 
-  const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
-  const personForTask = (id: string | null) => people.find((p) => p.id === id) ?? null
   // Me deben always includes status Me deben and Recurrente, plus anything
   // with a due date still in the future, plus anything postponed (Prelada)
   // that hasn't reached its postponed-until date yet. Once that date
@@ -341,21 +340,12 @@ export default function Dashboard() {
 
       <div className="space-y-2">
         {filtered.map((t) => {
-          const person = personForTask(t.responsible_id)
-          const indirectPerson = personForTask(t.indirect_id)
+          const person = personById(t.responsible_id)
+          const indirectPerson = personById(t.indirect_id)
           const hasContact = Boolean(person?.email || person?.phone)
           const isExpanded = expandedTaskId === t.id
           const overdue = isOverdue(t.due_date, t.status_id)
-          const isPrelada = t.pending_dependency_count > 0 || t.status_id === 6
-          const today = new Date().toISOString().slice(0, 10)
-          const hasFollowUp = Boolean(t.due_date) && t.due_date! > today && t.status_id !== 8
-          const cardBg = overdue
-            ? 'bg-red-50 border-red-300'
-            : isPrelada
-            ? 'bg-gray-200 border-gray-400'
-            : hasFollowUp
-            ? 'bg-orange-50 border-orange-300'
-            : 'bg-white border-gray-200'
+          const cardBg = getTaskCardStyle(t)
 
           return (
             <div
