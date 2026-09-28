@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { Person, TaskScore } from '../lib/types'
-import { PRIORITY_COLORS } from '../lib/types'
+import { PRIORITY_COLORS, statusPillClass } from '../lib/types'
 import { isOverdue } from '../lib/calendar'
 import { getTaskCardStyle } from '../lib/taskCardStyle'
 import { formatRichText } from '../components/RichText'
@@ -371,7 +371,7 @@ export default function Dashboard() {
                   <select
                     value={t.status_id}
                     onChange={(e) => updateStatus(t.id, Number(e.target.value), t.blocking_count)}
-                    className="text-xs bg-amber-100 text-amber-800 font-medium rounded-full pl-2 pr-1 py-0.5 border-0 appearance-none"
+                    className={`text-xs font-medium rounded-full pl-2 pr-1 py-0.5 border-0 appearance-none ${statusPillClass(t.status_id)}`}
                   >
                     {statuses.map((s) => (
                       <option key={s.id} value={s.id}>{s.label}</option>
@@ -502,14 +502,14 @@ export default function Dashboard() {
                   <button
                     type="button"
                     onClick={() => handleContactAction('call')}
-                    className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium bg-white"
+                    className="rounded-lg px-3 py-2.5 text-sm font-medium bg-[#FFFF00] text-black"
                   >
                     ☎️ Línea normal
                   </button>
                   <button
                     type="button"
                     onClick={() => handleContactAction('whatsapp-call')}
-                    className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium bg-white"
+                    className="rounded-lg px-3 py-2.5 text-sm font-medium bg-[#FFFF00] text-black"
                   >
                     📞 WhatsApp
                   </button>

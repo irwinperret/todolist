@@ -140,3 +140,11 @@ export const PRIORITY_COLORS: Record<number, string> = {
   4: 'bg-blue-400',
   5: 'bg-gray-400',
 }
+
+export const EJECUTAR_STATUS_ID = 2
+
+// The status pill on task cards is amber for everything, except Ejecutar
+// (status 2), which gets a fluorescent yellow so it jumps out from the list.
+export function statusPillClass(statusId: number): string {
+  return statusId === EJECUTAR_STATUS_ID ? 'bg-[#FFFF00] text-black' : 'bg-amber-100 text-amber-800'
+}
