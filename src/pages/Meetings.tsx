@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useFeedback } from '../lib/FeedbackContext'
 import type { Meeting } from '../lib/types'
 
 export default function Meetings() {
+  const { notifyError, confirm } = useFeedback()
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [loading, setLoading] = useState(true)
   const [newMeeting, setNewMeeting] = useState('')
@@ -48,7 +50,7 @@ export default function Meetings() {
       setNewMeeting('')
       load()
     } else {
-      alert(error.message)
+      notifyError(error.message)
     }
   }
 
@@ -67,14 +69,14 @@ export default function Meetings() {
       setEditingId(null)
       load()
     } else {
-      alert(error.message)
+      notifyError(error.message)
     }
   }
 
   const deleteMeeting = async (id: string, name: string) => {
-    if (!confirm(`¿Borrar la reunión "${name}"? Esto borra todas sus minutas e items. Las tareas ya creadas a partir de items NO se borran, solo quedan desvinculadas. No se puede deshacer.`)) return
+    if (!(await confirm(`¿Borrar la reunión "${name}"? Esto borra todas sus minutas e items. Las tareas ya creadas a partir de items NO se borran, solo quedan desvinculadas. No se puede deshacer.`, { danger: true, confirmLabel: 'Borrar' }))) return
     const { error } = await supabase.from('meetings').delete().eq('id', id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     load()
   }
 

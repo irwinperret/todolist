@@ -8,6 +8,7 @@ import { isOverdue } from '../lib/calendar'
 import { formatRichText } from '../components/RichText'
 import { getFreedTasks, reconcilePostponedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
+import { useFeedback } from '../lib/FeedbackContext'
 
 const REVISAR_STATUS_ID = 4
 const LARGO_PLAZO_STATUS_ID = 9
@@ -19,6 +20,7 @@ type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 export default function Dashboard() {
   const navigate = useNavigate()
   const { projects, people, statuses, priorities } = useLookups()
+  const { notifyError } = useFeedback()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -61,7 +63,7 @@ export default function Dashboard() {
 
     const { error } = await supabase.from('tasks').update(payload).eq('id', taskId)
     if (error) {
-      alert(error.message)
+      notifyError(error.message)
       return
     }
 
@@ -74,7 +76,7 @@ export default function Dashboard() {
       .eq('task_id', taskId)
 
     if (meetingItemsError) {
-      alert(meetingItemsError.message)
+      notifyError(meetingItemsError.message)
       return
     }
 
@@ -97,7 +99,7 @@ export default function Dashboard() {
 
   const updatePriority = async (taskId: string, newPriorityId: number) => {
     const { error } = await supabase.from('tasks').update({ priority_id: newPriorityId }).eq('id', taskId)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     load()
   }
 
@@ -161,7 +163,7 @@ export default function Dashboard() {
   const normalizePhone = (phone: string) => phone.replace(/[^\d+]/g, '').replace(/^\+/, '')
 
   const showDesktopWarning = (message: string) => {
-    window.alert(message)
+    notifyError(message)
   }
 
   const handleContactAction = (action: ContactAction) => {

@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
+import { useFeedback } from '../lib/FeedbackContext'
 import type { Project, Person } from '../lib/types'
 
 export default function ManageLists() {
   const { projects, people, reload } = useLookups()
+  const { notifyError, confirm } = useFeedback()
   const [newProject, setNewProject] = useState('')
   const [projectsOpen, setProjectsOpen] = useState(false)
   const [peopleOpen, setPeopleOpen] = useState(false)
@@ -29,7 +31,7 @@ export default function ManageLists() {
     if (!error) {
       setNewProject('')
       reload()
-    } else alert(error.message)
+    } else notifyError(error.message)
   }
 
   const startEditProject = (p: Project) => {
@@ -43,7 +45,7 @@ export default function ManageLists() {
     if (!error) {
       setEditingProjectId(null)
       reload()
-    } else alert(error.message)
+    } else notifyError(error.message)
   }
 
   const archiveProject = async (id: string) => {
@@ -52,11 +54,11 @@ export default function ManageLists() {
   }
 
   const deleteProject = async (id: string, name: string) => {
-    if (!confirm(`¿Borrar "${name}" permanentemente? Si tiene tareas vinculadas, no se podrá borrar, en ese caso usa Archivar en su lugar.`)) return
+    if (!(await confirm(`¿Borrar "${name}" permanentemente? Si tiene tareas vinculadas, no se podrá borrar, en ese caso usa Archivar en su lugar.`, { danger: true, confirmLabel: 'Borrar' }))) return
     const { error } = await supabase.from('projects').delete().eq('id', id)
     if (error) {
-      if (error.message.includes('foreign key') || error.code === '23503') alert('Este proyecto tiene tareas vinculadas y no se puede borrar. Usa "Archivar" en su lugar.')
-      else alert(error.message)
+      if (error.message.includes('foreign key') || error.code === '23503') notifyError('Este proyecto tiene tareas vinculadas y no se puede borrar. Usa "Archivar" en su lugar.')
+      else notifyError(error.message)
     } else reload()
   }
 
@@ -74,7 +76,7 @@ export default function ManageLists() {
       setNewPersonEmail('')
       setNewPersonPhone('')
       reload()
-    } else alert(error.message)
+    } else notifyError(error.message)
   }
 
   const startEditPerson = (p: Person) => {
@@ -96,7 +98,7 @@ export default function ManageLists() {
     if (!error) {
       setEditingPersonId(null)
       reload()
-    } else alert(error.message)
+    } else notifyError(error.message)
   }
 
   const archivePerson = async (id: string) => {
@@ -105,11 +107,11 @@ export default function ManageLists() {
   }
 
   const deletePerson = async (id: string, name: string) => {
-    if (!confirm(`¿Borrar "${name}" permanentemente? Si tiene tareas vinculadas, no se podrá borrar, en ese caso usa Archivar en su lugar.`)) return
+    if (!(await confirm(`¿Borrar "${name}" permanentemente? Si tiene tareas vinculadas, no se podrá borrar, en ese caso usa Archivar en su lugar.`, { danger: true, confirmLabel: 'Borrar' }))) return
     const { error } = await supabase.from('people').delete().eq('id', id)
     if (error) {
-      if (error.message.includes('foreign key') || error.code === '23503') alert('Esta persona tiene tareas vinculadas y no se puede borrar. Usa "Archivar" en su lugar.')
-      else alert(error.message)
+      if (error.message.includes('foreign key') || error.code === '23503') notifyError('Esta persona tiene tareas vinculadas y no se puede borrar. Usa "Archivar" en su lugar.')
+      else notifyError(error.message)
     } else reload()
   }
 

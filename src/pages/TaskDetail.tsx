@@ -6,6 +6,7 @@ import type { TaskFollowup, TaskPhoto, TaskScore, TaskLite, TaskVoiceNote } from
 import { useFormatShortcuts, formatRichText, FormatToolbar } from '../components/RichText'
 import { getFreedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
+import { useFeedback } from '../lib/FeedbackContext'
 
 type DependencyLite = TaskLite & { resolved_at: string | null }
 
@@ -13,6 +14,7 @@ export default function TaskDetail() {
   const { id } = useParams()
   const isNew = id === 'new' || !id
   const navigate = useNavigate()
+  const { notifyError, confirm } = useFeedback()
   const location = useLocation()
   const fromMeetingId = (location.state as { fromMeetingId?: string } | null)?.fromMeetingId
   const returnTo = fromMeetingId ? `/meetings/${fromMeetingId}` : '/'
@@ -131,7 +133,7 @@ export default function TaskDetail() {
       .select()
       .single()
     if (error) {
-      alert(error.message)
+      notifyError(error.message)
       return null
     }
     draftIdRef.current = data.id
@@ -179,7 +181,7 @@ export default function TaskDetail() {
 
   const handleSave = async () => {
     if (!task.title || !task.project_id || !task.responsible_id) {
-      alert('Título, proyecto y responsable son obligatorios.')
+      notifyError('Título, proyecto y responsable son obligatorios.')
       return
     }
     setSaving(true)
@@ -203,18 +205,18 @@ export default function TaskDetail() {
     if (isNew) {
       const { data, error } = await supabase.from('tasks').insert(payload).select().single()
       setSaving(false)
-      if (error) return alert(error.message)
+      if (error) return notifyError(error.message)
       draftIdRef.current = null
       navigate(`/task/${data.id}`, { replace: true })
     } else {
       const { error } = await supabase.from('tasks').update(payload).eq('id', id)
       if (error) {
         setSaving(false)
-        return alert(error.message)
+        return notifyError(error.message)
       }
       const meetingError = await syncMeetingItems(id!, payload.title, payload.comment, payload.status_id)
       setSaving(false)
-      if (meetingError) return alert(meetingError.message)
+      if (meetingError) return notifyError(meetingError.message)
       draftIdRef.current = null
       navigate(returnTo)
     }
@@ -243,7 +245,7 @@ export default function TaskDetail() {
     if (!taskId) return
     const path = `${taskId}/${Date.now()}_${file.name}`
     const { error: uploadError } = await supabase.storage.from('task-photos').upload(path, file)
-    if (uploadError) return alert(uploadError.message)
+    if (uploadError) return notifyError(uploadError.message)
     const { error } = await supabase.from('task_photos').insert({ task_id: taskId, storage_path: path })
     if (!error) load(taskId)
   }
@@ -277,7 +279,7 @@ export default function TaskDetail() {
       setRecordSeconds(0)
       timerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000)
     } catch (err) {
-      alert('No se pudo acceder al micrófono. Revisa los permisos del navegador.')
+      notifyError('No se pudo acceder al micrófono. Revisa los permisos del navegador.')
     }
   }
 
@@ -294,7 +296,7 @@ export default function TaskDetail() {
     const { error: uploadError } = await supabase.storage.from('task-voice-notes').upload(path, blob, { contentType: mimeType || 'audio/webm' })
     if (uploadError) {
       setUploadingVoice(false)
-      return alert(uploadError.message)
+      return notifyError(uploadError.message)
     }
     const { error } = await supabase.from('task_voice_notes').insert({ task_id: taskId, storage_path: path, duration_seconds: recordSeconds })
     setUploadingVoice(false)
@@ -302,7 +304,7 @@ export default function TaskDetail() {
   }
 
   const deleteVoiceNote = async (note: TaskVoiceNote) => {
-    if (!confirm('¿Borrar esta nota de voz?')) return
+    if (!(await confirm('¿Borrar esta nota de voz?', { danger: true, confirmLabel: 'Borrar' }))) return
     await supabase.storage.from('task-voice-notes').remove([note.storage_path])
     await supabase.from('task_voice_notes').delete().eq('id', note.id)
     load()
@@ -315,9 +317,9 @@ export default function TaskDetail() {
       .from('tasks')
       .update({ status_id: 8, resolved_at: new Date().toISOString(), resolution_notes: resolutionText || null })
       .eq('id', id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     const meetingError = await supabase.from('meeting_items').update({ is_done: true }).eq('task_id', id)
-    if (meetingError.error) return alert(meetingError.error.message)
+    if (meetingError.error) return notifyError(meetingError.error.message)
     // Any task that was waiting on this one can now show that prelación as resolved
     await supabase
       .from('task_dependencies')
@@ -334,7 +336,7 @@ export default function TaskDetail() {
   }
 
   const confirmPostpone = async () => {
-    if (!postponeDate) return alert('Elige una fecha.')
+    if (!postponeDate) return notifyError('Elige una fecha.')
     if (isNew) {
       setTask({ ...task, status_id: 6, postponed_until: postponeDate })
       setPostponePrompt(false)
@@ -345,7 +347,7 @@ export default function TaskDetail() {
       .from('tasks')
       .update({ status_id: 6, postponed_until: postponeDate })
       .eq('id', id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     setPostponePrompt(false)
     setPostponeDate('')
     load()
@@ -360,15 +362,15 @@ export default function TaskDetail() {
       .from('tasks')
       .update({ status_id: 2, postponed_until: null })
       .eq('id', id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     load()
   }
 
   const handleReopen = async () => {
     const { error } = await supabase.from('tasks').update({ status_id: 2, resolved_at: null }).eq('id', id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     const { error: meetingError } = await supabase.from('meeting_items').update({ is_done: false }).eq('task_id', id)
-    if (meetingError) return alert(meetingError.message)
+    if (meetingError) return notifyError(meetingError.message)
     // Reactivate any prelación that was marked resolved because this task used to be done
     await supabase.from('task_dependencies').update({ resolved_at: null }).eq('depends_on_task_id', id)
     load()
@@ -377,7 +379,7 @@ export default function TaskDetail() {
   const handleCreatePerson = async () => {
     if (!newPersonName.trim()) return
     const { data, error } = await supabase.from('people').insert({ name: newPersonName.trim() }).select().single()
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     await reloadLookups()
     setTask((t) => ({ ...t, responsible_id: data.id }))
     setNewPersonName('')
@@ -390,11 +392,11 @@ export default function TaskDetail() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('¿Borrar esta tarea permanentemente? Esto también borra sus fotos, notas de voz, notas de seguimiento y dependencias. No se puede deshacer.')) return
+    if (!(await confirm('¿Borrar esta tarea permanentemente? Esto también borra sus fotos, notas de voz, notas de seguimiento y dependencias. No se puede deshacer.', { danger: true, confirmLabel: 'Borrar' }))) return
     if (photos.length > 0) await supabase.storage.from('task-photos').remove(photos.map((p) => p.storage_path))
     if (voiceNotes.length > 0) await supabase.storage.from('task-voice-notes').remove(voiceNotes.map((v) => v.storage_path))
     const { error } = await supabase.from('tasks').delete().eq('id', id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     navigate(returnTo)
   }
 

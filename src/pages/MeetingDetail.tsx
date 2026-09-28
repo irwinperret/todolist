@@ -15,6 +15,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../lib/supabase'
 import { copyMeetingExportToClipboard } from '../lib/meetingExport'
 import { useFab } from '../lib/FabContext'
+import { useFeedback } from '../lib/FeedbackContext'
 import { useLookups } from '../lib/useLookups'
 import { RichText, RichTextArea, formatRichText, useFormatShortcuts } from '../components/RichText'
 import type { Meeting, MeetingMinute, MeetingItem, MeetingCategory, TaskScore, Project, Person, Status, PriorityLevel } from '../lib/types'
@@ -78,6 +79,7 @@ type ItemActions = {
 export default function MeetingDetail() {
   const { id } = useParams()
   const { setFab } = useFab()
+  const { notifyError, confirm } = useFeedback()
   const { projects, people, statuses, priorities } = useLookups()
   const [meeting, setMeeting] = useState<Meeting | null>(null)
   const [minutes, setMinutes] = useState<MinuteWithData[]>([])
@@ -208,7 +210,7 @@ export default function MeetingDetail() {
   }, [minutes])
 
   const handleCreateFirstMinute = async () => {
-    if (!minutaText.trim()) return alert('Escribe algo en la minuta.')
+    if (!minutaText.trim()) return notifyError('Escribe algo en la minuta.')
     setSaving(true)
     const { error } = await supabase.from('meeting_minutes').insert({
       meeting_id: id,
@@ -218,7 +220,7 @@ export default function MeetingDetail() {
       acuerdos: acuerdos.trim() || null,
     })
     setSaving(false)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     setCreatingFirstMinute(false)
     setAttendees('')
     setMinutaText('')
@@ -236,7 +238,7 @@ export default function MeetingDetail() {
 
   const saveEditMinute = async () => {
     if (!editingMinuteId) return
-    if (!editMinuta.trim()) return alert('La minuta no puede quedar vacía.')
+    if (!editMinuta.trim()) return notifyError('La minuta no puede quedar vacía.')
     const { error } = await supabase
       .from('meeting_minutes')
       .update({
@@ -246,13 +248,13 @@ export default function MeetingDetail() {
         acuerdos: editAcuerdos.trim() || null,
       })
       .eq('id', editingMinuteId)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     setEditingMinuteId(null)
     load()
   }
 
   const handleDeleteMinute = async (minuteId: string) => {
-    if (!confirm('¿Borrar esta minuta, sus categorías e items? Las tareas ya creadas NO se borran, solo se desvinculan. No se puede deshacer.')) return
+    if (!(await confirm('¿Borrar esta minuta, sus categorías e items? Las tareas ya creadas NO se borran, solo se desvinculan. No se puede deshacer.', { danger: true, confirmLabel: 'Borrar' }))) return
     await supabase.from('meeting_minutes').delete().eq('id', minuteId)
     load()
   }
@@ -262,7 +264,7 @@ export default function MeetingDetail() {
     const { error } = await supabase
       .from('meeting_categories')
       .insert({ meeting_minute_id: minuteId, parent_id: parentId, name: name.trim(), sort_order: siblingCount })
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     load()
   }
 
@@ -279,9 +281,9 @@ export default function MeetingDetail() {
   }
 
   const deleteCategory = async (cat: MeetingCategory) => {
-    if (!confirm(`¿Borrar "${cat.name}"? Si tiene subcategorías, también se borran. Los items que tenía quedan como "Sin categoría", no se pierden. No se puede deshacer.`)) return
+    if (!(await confirm(`¿Borrar "${cat.name}"? Si tiene subcategorías, también se borran. Los items que tenía quedan como "Sin categoría", no se pierden. No se puede deshacer.`, { danger: true, confirmLabel: 'Borrar' }))) return
     const { error } = await supabase.from('meeting_categories').delete().eq('id', cat.id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     load()
   }
 
@@ -290,14 +292,14 @@ export default function MeetingDetail() {
     const { error } = await supabase
       .from('meeting_items')
       .insert({ meeting_minute_id: minuteId, category_id: categoryId, content: content.trim(), sort_order: itemCount })
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     load()
   }
 
   const saveItemContent = async (item: MeetingItem, content: string) => {
     if (!content.trim()) return
     const { error } = await supabase.from('meeting_items').update({ content: content.trim() }).eq('id', item.id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     if (item.task_id) {
       await supabase.from('tasks').update({ title: content.trim() }).eq('id', item.task_id)
     }
@@ -305,7 +307,7 @@ export default function MeetingDetail() {
   }
 
   const deleteItem = async (item: MeetingItem) => {
-    if (!confirm('¿Borrar este item? Si está sincronizado con una tarea, la tarea NO se borra, solo se desvincula.')) return
+    if (!(await confirm('¿Borrar este item? Si está sincronizado con una tarea, la tarea NO se borra, solo se desvincula.', { danger: true, confirmLabel: 'Borrar' }))) return
     await supabase.from('meeting_items').delete().eq('id', item.id)
     load()
   }
@@ -313,7 +315,7 @@ export default function MeetingDetail() {
   const toggleDone = async (item: MeetingItem) => {
     const nextDone = !item.is_done
     const { error } = await supabase.from('meeting_items').update({ is_done: nextDone }).eq('id', item.id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     if (item.task_id) {
       await supabase.from('tasks').update({ status_id: nextDone ? 8 : 2 }).eq('id', item.task_id)
     }
@@ -322,14 +324,14 @@ export default function MeetingDetail() {
 
   const toggleLongTerm = async (item: MeetingItem) => {
     const { error } = await supabase.from('meeting_items').update({ is_long_term: !item.is_long_term }).eq('id', item.id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     load()
   }
 
   const saveItemComment = async (item: MeetingItem, comment: string) => {
     const cleanComment = comment.trim() || null
     const { error } = await supabase.from('meeting_items').update({ comment: cleanComment }).eq('id', item.id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     if (item.task_id) {
       await supabase.from('tasks').update({ comment: cleanComment }).eq('id', item.task_id)
     }
@@ -345,7 +347,7 @@ export default function MeetingDetail() {
   }
 
   const confirmConvert = async (item: MeetingItem) => {
-    if (!convProject || !convResponsible) return alert('Selecciona proyecto y responsable.')
+    if (!convProject || !convResponsible) return notifyError('Selecciona proyecto y responsable.')
     const { data: task, error } = await supabase
       .from('tasks')
       .insert({
@@ -358,16 +360,16 @@ export default function MeetingDetail() {
       })
       .select()
       .single()
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     const { error: linkError } = await supabase.from('meeting_items').update({ task_id: task.id }).eq('id', item.id)
-    if (linkError) return alert(linkError.message)
+    if (linkError) return notifyError(linkError.message)
     setConvertingItemId(null)
     load()
   }
 
   const unlinkItem = async (item: MeetingItem) => {
     if (!item.task_id) return
-    if (!confirm('¿Desvincular? Esto borra la tarea del To Do (fotos y notas de voz incluidas), pero el item se mantiene en esta minuta como texto normal. No se puede deshacer.')) return
+    if (!(await confirm('¿Desvincular? Esto borra la tarea del To Do (fotos y notas de voz incluidas), pero el item se mantiene en esta minuta como texto normal. No se puede deshacer.', { danger: true, confirmLabel: 'Desvincular' }))) return
 
     const [{ data: photos }, { data: voiceNotes }] = await Promise.all([
       supabase.from('task_photos').select('storage_path').eq('task_id', item.task_id),
@@ -381,7 +383,7 @@ export default function MeetingDetail() {
     }
 
     const { error } = await supabase.from('tasks').delete().eq('id', item.task_id)
-    if (error) return alert(error.message)
+    if (error) return notifyError(error.message)
     load()
   }
 
