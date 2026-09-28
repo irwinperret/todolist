@@ -502,14 +502,14 @@ export default function Dashboard() {
                   <button
                     type="button"
                     onClick={() => handleContactAction('call')}
-                    className="rounded-lg px-3 py-2.5 text-sm font-medium bg-[#FFFF00] text-black"
+                    className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium bg-white"
                   >
                     ☎️ Línea normal
                   </button>
                   <button
                     type="button"
                     onClick={() => handleContactAction('whatsapp-call')}
-                    className="rounded-lg px-3 py-2.5 text-sm font-medium bg-[#FFFF00] text-black"
+                    className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium bg-white"
                   >
                     📞 WhatsApp
                   </button>
