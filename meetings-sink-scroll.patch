@@ -1,0 +1,36 @@
+diff --git a/src/pages/MeetingDetail.tsx b/src/pages/MeetingDetail.tsx
+index eaba982..35ff2a6 100644
+--- a/src/pages/MeetingDetail.tsx
++++ b/src/pages/MeetingDetail.tsx
+@@ -319,6 +319,22 @@ export default function MeetingDetail() {
+     if (item.task_id) {
+       await supabase.from('tasks').update({ status_id: nextDone ? 8 : 2 }).eq('id', item.task_id)
+     }
++    if (nextDone) {
++      // Sink the checked item to the bottom of its own category/subcategory.
++      // This only sets the initial position right after checking it off —
++      // the normal drag-and-drop reordering still works on it afterward,
++      // same as any other item.
++      const minute = minutes.find((mn) => mn.items.some((i) => i.id === item.id))
++      if (minute) {
++        const siblings = minute.items
++          .filter((i) => i.category_id === item.category_id && i.id !== item.id)
++          .sort((a, b) => a.sort_order - b.sort_order)
++        const ordered = [...siblings, item]
++        await Promise.all(
++          ordered.map((i, idx) => supabase.from('meeting_items').update({ sort_order: idx }).eq('id', i.id))
++        )
++      }
++    }
+     load()
+   }
+ 
+@@ -421,7 +437,7 @@ export default function MeetingDetail() {
+     setConvPriority,
+   }
+ 
+-  if (loading) return <p className="text-gray-400 text-sm py-8 text-center">Cargando...</p>
++  if (loading && !meeting) return <p className="text-gray-400 text-sm py-8 text-center">Cargando...</p>
+   if (!meeting) return <p className="text-gray-400 text-sm py-8 text-center">Reunión no encontrada.</p>
+ 
+   return (
