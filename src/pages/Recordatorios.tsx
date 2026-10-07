@@ -62,7 +62,7 @@ export default function Recordatorios() {
                       </span>
                     </>
                   )}
-                  <span className="ml-auto text-[11px] text-gray-300" title={formatTaskAge(t.created_at).full}>
+                  <span className="ml-auto text-[11px] text-gray-500" title={formatTaskAge(t.created_at).full}>
                     {formatTaskAge(t.created_at).label}
                   </span>
                 </div>
