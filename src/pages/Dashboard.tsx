@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { Person, TaskScore } from '../lib/types'
 import { PRIORITY_COLORS, statusPillClass } from '../lib/types'
-import { isOverdue } from '../lib/calendar'
+import { isOverdue, formatTaskAge } from '../lib/calendar'
 import { getTaskCardStyle } from '../lib/taskCardStyle'
 import { formatRichText } from '../components/RichText'
 import { getFreedTasks, reconcilePostponedTasks, type FreedTask } from '../lib/dependencies'
@@ -424,6 +424,9 @@ export default function Dashboard() {
                     </span>
                   </>
                 )}
+                <span className="ml-auto text-[11px] text-gray-300" title={formatTaskAge(t.created_at).full}>
+                  {formatTaskAge(t.created_at).label}
+                </span>
               </div>
 
               {isExpanded && (

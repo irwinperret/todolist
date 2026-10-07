@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import { PRIORITY_COLORS, statusPillClass } from '../lib/types'
-import { isOverdue } from '../lib/calendar'
+import { isOverdue, formatTaskAge } from '../lib/calendar'
 import { getTaskCardStyle } from '../lib/taskCardStyle'
 import { reconcilePostponedTasks } from '../lib/dependencies'
 import { formatRichText } from '../components/RichText'
@@ -128,6 +128,9 @@ export default function Periodicas() {
                   </span>
                 </>
               )}
+              <span className="ml-auto text-[11px] text-gray-300" title={formatTaskAge(t.created_at).full}>
+                {formatTaskAge(t.created_at).label}
+              </span>
             </div>
           </Link>
           )
