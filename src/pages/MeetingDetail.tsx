@@ -856,11 +856,11 @@ function CategoryBlock(props: {
           <button onClick={props.onCancelRenameCategory} className="text-xs text-gray-400">Cancelar</button>
         </div>
       ) : (
-        <div className="flex items-center gap-2">
+        <div>
           <p className={props.depth === 0 ? 'text-xs font-semibold text-gray-500 uppercase tracking-wide' : 'text-xs font-medium text-gray-400'}>
             {props.depth > 0 ? '— ' : ''}{props.node.name}
           </p>
-          <div className="ml-auto flex items-center gap-4">
+          <div className="flex items-center gap-4 pl-3 pt-0.5">
             <button onClick={() => props.onStartRenameCategory(props.node)} className="text-xs text-blue-600">Editar</button>
             <button onClick={() => props.onDeleteCategory(props.node)} className="text-xs text-red-500">Borrar</button>
           </div>
