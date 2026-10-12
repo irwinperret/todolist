@@ -538,7 +538,8 @@ function MinuteCard(props: {
   const { minute: m } = props
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
-  const [addingSubTo, setAddingSubTo] = useState<{ id: string; siblingCount: number } | null>(null)
+  const [showAddSub, setShowAddSub] = useState(false)
+  const [subParentId, setSubParentId] = useState('')
   const [newSubName, setNewSubName] = useState('')
   const [showAddItem, setShowAddItem] = useState(false)
 
@@ -591,8 +592,6 @@ function MinuteCard(props: {
   }
 
   const topLevelCount = m.categories.filter((c) => !c.parent_id).length
-
-  const requestAddSub = (categoryId: string, siblingCount: number) => setAddingSubTo({ id: categoryId, siblingCount })
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
@@ -715,7 +714,6 @@ function MinuteCard(props: {
                 onStartRenameCategory={props.onStartRenameCategory}
                 onSaveRenameCategory={props.onSaveRenameCategory}
                 onCancelRenameCategory={props.onCancelRenameCategory}
-                onRequestAddSub={requestAddSub}
                 onDeleteCategory={props.onDeleteCategory}
               />
             ))}
@@ -744,26 +742,49 @@ function MinuteCard(props: {
             </button>
             <button onClick={() => { setShowAddCategory(false); setNewCategoryName('') }} className="text-xs text-gray-400 px-2">Cancelar</button>
           </div>
-        ) : addingSubTo ? (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Nombre de la subcategoría"
-              value={newSubName}
-              onChange={(e) => setNewSubName(e.target.value)}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              autoFocus
-            />
-            <button
-              onClick={() => { props.onAddCategory(m.id, addingSubTo.id, newSubName, addingSubTo.siblingCount); setNewSubName(''); setAddingSubTo(null) }}
-              className="text-xs text-green-600 px-2"
+        ) : (
+          <button onClick={() => setShowAddCategory(true)} className="block text-xs text-blue-600">+ Agregar categoría</button>
+        )}
+
+        {showAddSub ? (
+          <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
+            <select
+              value={subParentId}
+              onChange={(e) => setSubParentId(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm bg-white"
             >
-              Agregar
-            </button>
-            <button onClick={() => { setAddingSubTo(null); setNewSubName('') }} className="text-xs text-gray-400 px-2">Cancelar</button>
+              <option value="">¿Dentro de cuál categoría?</option>
+              {categoryOptions.map((o) => (
+                <option key={o.id} value={o.id}>{o.label}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Nombre de la subcategoría"
+                value={newSubName}
+                onChange={(e) => setNewSubName(e.target.value)}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                autoFocus
+              />
+              <button
+                disabled={!subParentId || !newSubName.trim()}
+                onClick={() => {
+                  const siblingCount = m.categories.filter((c) => c.parent_id === subParentId).length
+                  props.onAddCategory(m.id, subParentId, newSubName, siblingCount)
+                  setNewSubName(''); setSubParentId(''); setShowAddSub(false)
+                }}
+                className="text-xs text-green-600 px-2 disabled:text-gray-300"
+              >
+                Agregar
+              </button>
+              <button onClick={() => { setShowAddSub(false); setNewSubName(''); setSubParentId('') }} className="text-xs text-gray-400 px-2">Cancelar</button>
+            </div>
           </div>
         ) : (
-          <button onClick={() => setShowAddCategory(true)} className="text-xs text-blue-600">+ Agregar categoría</button>
+          categoryOptions.length > 0 && (
+            <button onClick={() => setShowAddSub(true)} className="block text-xs text-blue-600">+ Agregar subcategoría</button>
+          )
         )}
 
         {showAddItem ? (
@@ -813,7 +834,6 @@ function CategoryBlock(props: {
   onStartRenameCategory: (cat: MeetingCategory) => void
   onSaveRenameCategory: () => void
   onCancelRenameCategory: () => void
-  onRequestAddSub: (categoryId: string, siblingCount: number) => void
   onDeleteCategory: (cat: MeetingCategory) => void
 }) {
   const items = props.itemsByCategory[props.node.id] ?? []
@@ -840,9 +860,10 @@ function CategoryBlock(props: {
           <p className={props.depth === 0 ? 'text-xs font-semibold text-gray-500 uppercase tracking-wide' : 'text-xs font-medium text-gray-400'}>
             {props.depth > 0 ? '— ' : ''}{props.node.name}
           </p>
-          <button onClick={() => props.onStartRenameCategory(props.node)} className="text-xs text-blue-600">Editar</button>
-          <button onClick={() => props.onRequestAddSub(props.node.id, props.node.children.length)} className="text-xs text-blue-600">+ Subcategoría</button>
-          <button onClick={() => props.onDeleteCategory(props.node)} className="text-xs text-red-500">Borrar</button>
+          <div className="ml-auto flex items-center gap-4">
+            <button onClick={() => props.onStartRenameCategory(props.node)} className="text-xs text-blue-600">Editar</button>
+            <button onClick={() => props.onDeleteCategory(props.node)} className="text-xs text-red-500">Borrar</button>
+          </div>
         </div>
       )}
 
@@ -868,7 +889,6 @@ function CategoryBlock(props: {
           onStartRenameCategory={props.onStartRenameCategory}
           onSaveRenameCategory={props.onSaveRenameCategory}
           onCancelRenameCategory={props.onCancelRenameCategory}
-          onRequestAddSub={props.onRequestAddSub}
           onDeleteCategory={props.onDeleteCategory}
         />
       ))}
