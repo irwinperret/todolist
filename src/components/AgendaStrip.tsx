@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { googleCalendarNewEventUrl } from '../lib/calendar'
+import { googleCalendarDayUrl } from '../lib/calendar'
 
 type AgendaEvent = {
   title: string
@@ -109,11 +109,11 @@ export default function AgendaStrip() {
                       {dayTitle(i, day.start)}
                     </p>
                     <a
-                      href={googleCalendarNewEventUrl(day.key)}
+                      href={googleCalendarDayUrl(day.key)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      aria-label={`Agregar evento el ${day.key}`}
-                      title="Agregar evento en Google Calendar"
+                      aria-label={`Abrir ${day.key} en Google Calendar`}
+                      title="Abrir este día en Google Calendar"
                       className="shrink-0 -mt-0.5 -mr-0.5 w-6 h-6 flex items-center justify-center rounded-full bg-white border border-gray-300 text-gray-700 text-base leading-none"
                     >
                       +
