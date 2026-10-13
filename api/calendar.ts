@@ -1,7 +1,7 @@
 import { eventsFromIcs, type AgendaEvent } from './_ical.js'
 
 // Reads the private iCal feeds of your Google calendars (secret URLs kept in
-// the GOOGLE_CALENDAR_ICAL_URLS env var on Vercel, never sent to the browser)
+// the GOOGLE_CALENDAR_ICAL_URLS* env vars on Vercel, never sent to the browser)
 // and returns only the events in the requested window. Requires a valid
 // Supabase session so strangers can't read your agenda.
 
@@ -23,8 +23,13 @@ async function isSignedIn(request: Request): Promise<boolean> {
 export async function GET(request: Request) {
   if (!(await isSignedIn(request))) return json({ error: 'unauthorized' }, 401)
 
-  const feeds = (process.env.GOOGLE_CALENDAR_ICAL_URLS ?? '')
-    .split(/[\s,]+/)
+  // Every env var whose name starts with GOOGLE_CALENDAR_ICAL_URLS is read
+  // (e.g. GOOGLE_CALENDAR_ICAL_URLS, GOOGLE_CALENDAR_ICAL_URLS_PERING), so each
+  // calendar can live in its own variable and editing one never overwrites the
+  // others. Each value may hold one link or several separated by commas/spaces.
+  const feeds = Object.entries(process.env)
+    .filter(([name]) => name.startsWith('GOOGLE_CALENDAR_ICAL_URLS'))
+    .flatMap(([, value]) => (value ?? '').split(/[\s,]+/))
     .map((s) => s.trim())
     .filter((s) => /^https?:\/\//.test(s))
   if (feeds.length === 0) return json({ configured: false, events: [] })
