@@ -9,6 +9,7 @@ import { getTaskCardStyle } from '../lib/taskCardStyle'
 import { formatRichText } from '../components/RichText'
 import { getFreedTasks, reconcilePostponedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
+import AgendaStrip from '../components/AgendaStrip'
 import { useFeedback } from '../lib/FeedbackContext'
 
 const REVISAR_STATUS_ID = 4
@@ -230,6 +231,8 @@ export default function Dashboard() {
 
   return (
     <div className="px-4 pt-4 space-y-3">
+      <AgendaStrip />
+
       <input
         type="text"
         placeholder="Buscar..."

@@ -28,6 +28,8 @@ export default defineConfig({
         // with no signal, like a native app.
         globPatterns: ['**/*.{js,css,html,svg,ico,png}'],
         navigateFallback: '/index.html',
+        // Serverless functions (e.g. /api/calendar) must never be answered with the app shell.
+        navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
             // Cache Supabase REST reads so previously loaded data (tasks,
