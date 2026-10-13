@@ -2,6 +2,7 @@ export type Project = {
   id: string
   name: string
   archived: boolean
+  color: string | null
 }
 
 export type Person = {
@@ -151,4 +152,19 @@ export function statusPillClass(statusId: number): string {
   return statusId === LLAMAR_STATUS_ID || statusId === EJECUTAR_STATUS_ID
     ? 'bg-[#FFFF00] text-black'
     : 'bg-amber-100 text-amber-800'
+}
+
+// Pastel palette for project chips. A project with no saved color gets one of
+// these automatically (stable per project), so everything is colored from the
+// start and you only pick a color where you want a different one.
+export const PROJECT_COLORS = [
+  '#FBCFE8', '#FECACA', '#FED7AA', '#FDE68A', '#D9F99D', '#BBF7D0',
+  '#99F6E4', '#A5F3FC', '#BFDBFE', '#C7D2FE', '#DDD6FE', '#E5E7EB',
+]
+
+export function projectColor(project: Pick<Project, 'id' | 'color'>): string {
+  if (project.color) return project.color
+  let h = 0
+  for (const ch of project.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return PROJECT_COLORS[h % PROJECT_COLORS.length]
 }

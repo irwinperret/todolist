@@ -10,6 +10,7 @@ import { formatRichText } from '../components/RichText'
 import { getFreedTasks, reconcilePostponedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
 import AgendaStrip from '../components/AgendaStrip'
+import ProjectChip from '../components/ProjectChip'
 import { useFeedback } from '../lib/FeedbackContext'
 
 const REVISAR_STATUS_ID = 4
@@ -21,7 +22,7 @@ type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { projects, people, statuses, priorities, projectName, personById } = useLookups()
+  const { projects, people, statuses, priorities, projectName, projectColor, personById } = useLookups()
   const { notifyError } = useFeedback()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
@@ -393,7 +394,7 @@ export default function Dashboard() {
               </div>
 
               <div className="flex items-center gap-2 mt-2 text-xs text-gray-400 flex-wrap">
-                <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
+                <ProjectChip name={projectName(t.project_id)} color={projectColor(t.project_id)} />
                 <span>·</span>
                 {hasContact ? (
                   <button

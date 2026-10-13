@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import type { Project, Person, Status, PriorityLevel } from './types'
+import { projectColor as colorOf } from './types'
 
 export function useLookups() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -31,8 +32,12 @@ export function useLookups() {
   // Shared name-lookup helpers so every page that lists tasks doesn't have
   // to redefine the same `find(...)?.name ?? '—'` closures.
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
+  const projectColor = (id: string | null) => {
+    const p = projects.find((x) => x.id === id)
+    return p ? colorOf(p) : null
+  }
   const personById = (id: string | null) => people.find((p) => p.id === id) ?? null
   const personName = (id: string | null) => personById(id)?.name ?? '—'
 
-  return { projects, people, statuses, priorities, loading, reload, projectName, personName, personById }
+  return { projects, people, statuses, priorities, loading, reload, projectName, projectColor, personName, personById }
 }

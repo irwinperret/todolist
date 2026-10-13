@@ -7,9 +7,10 @@ import { googleCalendarUrl, isOverdue, formatTaskAge } from '../lib/calendar'
 import { getTaskCardStyle } from '../lib/taskCardStyle'
 import { reconcilePostponedTasks } from '../lib/dependencies'
 import { formatRichText } from '../components/RichText'
+import ProjectChip from '../components/ProjectChip'
 
 export default function Recordatorios() {
-  const { projectName, personName } = useLookups()
+  const { projectName, projectColor, personName } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -50,7 +51,7 @@ export default function Recordatorios() {
                 <p className="text-gray-900" dangerouslySetInnerHTML={{ __html: formatRichText(t.title) }} />
                 {t.subactivity && <p className="text-sm text-gray-500">{t.subactivity}</p>}
                 <div className="flex items-center gap-2 mt-2 text-xs flex-wrap">
-                  <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
+                  <ProjectChip name={projectName(t.project_id)} color={projectColor(t.project_id)} />
                   <span className="text-gray-400">·</span>
                   <span className="text-purple-700 font-medium">{personName(t.responsible_id)}</span>
                   {t.due_date && (

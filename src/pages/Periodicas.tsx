@@ -8,11 +8,12 @@ import { isOverdue, formatTaskAge } from '../lib/calendar'
 import { getTaskCardStyle } from '../lib/taskCardStyle'
 import { reconcilePostponedTasks } from '../lib/dependencies'
 import { formatRichText } from '../components/RichText'
+import ProjectChip from '../components/ProjectChip'
 
 const RUTINA_STATUS_ID = 10
 
 export default function Periodicas() {
-  const { statuses, priorities, projectName, personName } = useLookups()
+  const { statuses, priorities, projectName, projectColor, personName } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -110,7 +111,7 @@ export default function Periodicas() {
             </div>
 
             <div className="flex items-center gap-2 mt-2 text-xs text-gray-400 flex-wrap">
-              <span className="text-blue-700 font-medium">{projectName(t.project_id)}</span>
+              <ProjectChip name={projectName(t.project_id)} color={projectColor(t.project_id)} />
               <span>·</span>
               <span className="text-purple-700 font-medium">{personName(t.responsible_id)}</span>
               {t.rutina_frequency && (

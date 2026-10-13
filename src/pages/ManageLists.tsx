@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import { useFeedback } from '../lib/FeedbackContext'
 import type { Project, Person } from '../lib/types'
+import { PROJECT_COLORS, projectColor } from '../lib/types'
 
 export default function ManageLists() {
   const { projects, people, reload } = useLookups()
@@ -13,6 +14,7 @@ export default function ManageLists() {
 
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [editingProjectName, setEditingProjectName] = useState('')
+  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null)
 
   const [newPersonName, setNewPersonName] = useState('')
   const [newPersonRole, setNewPersonRole] = useState('')
@@ -46,6 +48,13 @@ export default function ManageLists() {
       setEditingProjectId(null)
       reload()
     } else notifyError(error.message)
+  }
+
+  const setProjectColor = async (id: string, color: string) => {
+    const { error } = await supabase.from('projects').update({ color }).eq('id', id)
+    if (error) return notifyError(error.message)
+    setColorPickerFor(null)
+    reload()
   }
 
   const archiveProject = async (id: string) => {
@@ -135,7 +144,8 @@ export default function ManageLists() {
             </div>
             <div className="space-y-1">
               {projects.map((p) => (
-                <div key={p.id} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-100 gap-2">
+                <div key={p.id} className="border-b border-gray-100">
+                <div className="flex items-center justify-between text-sm py-1.5 gap-2">
                   {editingProjectId === p.id ? (
                     <>
                       <input type="text" value={editingProjectName} onChange={(e) => setEditingProjectName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveProjectEdit()} className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm" autoFocus />
@@ -144,7 +154,15 @@ export default function ManageLists() {
                     </>
                   ) : (
                     <>
-                      <span className="truncate">{p.name}</span>
+                      <button
+                        onClick={() => setColorPickerFor(colorPickerFor === p.id ? null : p.id)}
+                        className="flex items-center gap-2 min-w-0 text-left"
+                        aria-label={`Cambiar color de ${p.name}`}
+                        aria-expanded={colorPickerFor === p.id}
+                      >
+                        <span className="w-5 h-5 rounded-full border border-gray-300 shrink-0" style={{ backgroundColor: projectColor(p) }} />
+                        <span className="truncate">{p.name}</span>
+                      </button>
                       <div className="flex gap-2 shrink-0">
                         <button onClick={() => startEditProject(p)} className="text-xs text-blue-600">Editar</button>
                         <button onClick={() => archiveProject(p.id)} className="text-xs text-gray-400">Archivar</button>
@@ -152,6 +170,20 @@ export default function ManageLists() {
                       </div>
                     </>
                   )}
+                </div>
+                {colorPickerFor === p.id && (
+                  <div className="flex flex-wrap gap-2 pb-2 pl-1">
+                    {PROJECT_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setProjectColor(p.id, c)}
+                        aria-label={`Color ${c}`}
+                        className={`w-8 h-8 rounded-full border ${projectColor(p) === c ? 'ring-2 ring-gray-900 border-white' : 'border-gray-300'}`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                )}
                 </div>
               ))}
             </div>

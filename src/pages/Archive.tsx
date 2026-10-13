@@ -5,9 +5,10 @@ import { useLookups } from '../lib/useLookups'
 import type { TaskScore } from '../lib/types'
 import PriorityBadge from '../components/PriorityBadge'
 import { formatRichText } from '../components/RichText'
+import ProjectChip from '../components/ProjectChip'
 
 export default function Archive() {
-  const { projectName, personName } = useLookups()
+  const { projectName, projectColor, personName } = useLookups()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -41,7 +42,7 @@ export default function Archive() {
             <PriorityBadge id={t.priority_id} label={t.priority_label} />
           </div>
           <div className="flex items-center gap-2 mt-1 text-xs text-gray-400 flex-wrap">
-            <span>{projectName(t.project_id)}</span>
+            <ProjectChip name={projectName(t.project_id)} color={projectColor(t.project_id)} />
             <span>·</span>
             <span>{personName(t.responsible_id)}</span>
             {t.resolved_at && (
