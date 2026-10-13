@@ -112,8 +112,8 @@ export default function AgendaStrip() {
                       href={googleCalendarDayUrl(day.key)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      aria-label={`Abrir ${day.key} en Google Calendar`}
-                      title="Abrir este día en Google Calendar"
+                      aria-label={`Abrir la semana del ${day.key} en Google Calendar`}
+                      title="Abrir la semana en Google Calendar"
                       className="shrink-0 -mt-0.5 -mr-0.5 w-6 h-6 flex items-center justify-center rounded-full bg-white border border-gray-300 text-gray-700 text-base leading-none"
                     >
                       +

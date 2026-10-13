@@ -45,9 +45,9 @@ export function formatTaskAge(createdAt: string): { label: string; full: string 
   return { label: `${date} · ${age}`, full: `Creada el ${created.toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}` }
 }
 
-// Opens Google Calendar on the day view for a given day (YYYY-MM-DD), so you
-// can look at it, edit events or add new ones there.
+// Opens Google Calendar on the week view containing a given day (YYYY-MM-DD),
+// so you can look at it, edit events or add new ones there.
 export function googleCalendarDayUrl(dateKey: string): string {
   const [y, m, d] = dateKey.split('-').map(Number)
-  return `https://calendar.google.com/calendar/r/day/${y}/${m}/${d}`
+  return `https://calendar.google.com/calendar/r/week/${y}/${m}/${d}`
 }
