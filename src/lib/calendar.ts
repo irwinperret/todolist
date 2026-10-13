@@ -44,3 +44,11 @@ export function formatTaskAge(createdAt: string): { label: string; full: string 
   const date = created.toLocaleDateString('es', sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })
   return { label: `${date} · ${age}`, full: `Creada el ${created.toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}` }
 }
+
+// Opens Google Calendar's "new event" screen for a given day (YYYY-MM-DD),
+// prefilled at 9:00-10:00 so it's one tap to adjust and save.
+export function googleCalendarNewEventUrl(dateKey: string): string {
+  const d = dateKey.replace(/-/g, '')
+  const query = new URLSearchParams({ action: 'TEMPLATE', dates: `${d}T090000/${d}T100000` })
+  return `https://calendar.google.com/calendar/render?${query.toString()}`
+}

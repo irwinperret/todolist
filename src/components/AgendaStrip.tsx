@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { googleCalendarNewEventUrl } from '../lib/calendar'
 
 type AgendaEvent = {
   title: string
@@ -103,9 +104,21 @@ export default function AgendaStrip() {
                   key={day.key}
                   className={`min-w-0 rounded-lg border p-2 ${i === 0 ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}
                 >
-                  <p className={`text-xs font-semibold uppercase tracking-wide ${i === 0 ? 'text-blue-700' : 'text-gray-600'}`}>
-                    {dayTitle(i, day.start)}
-                  </p>
+                  <div className="flex items-start justify-between gap-1">
+                    <p className={`text-xs font-semibold uppercase tracking-wide ${i === 0 ? 'text-blue-700' : 'text-gray-600'}`}>
+                      {dayTitle(i, day.start)}
+                    </p>
+                    <a
+                      href={googleCalendarNewEventUrl(day.key)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Agregar evento el ${day.key}`}
+                      title="Agregar evento en Google Calendar"
+                      className="shrink-0 -mt-0.5 -mr-0.5 w-6 h-6 flex items-center justify-center rounded-full bg-white border border-gray-300 text-gray-700 text-base leading-none"
+                    >
+                      +
+                    </a>
+                  </div>
                   <p className="text-[11px] text-gray-500 mb-1">
                     {day.start.toLocaleDateString('es', { day: 'numeric', month: 'short' })}
                   </p>
