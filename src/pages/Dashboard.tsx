@@ -11,6 +11,9 @@ import { getFreedTasks, reconcilePostponedTasks, type FreedTask } from '../lib/d
 import FreedTasksModal from '../components/FreedTasksModal'
 import AgendaStrip from '../components/AgendaStrip'
 import ProjectChip from '../components/ProjectChip'
+import MultiSelect from '../components/MultiSelect'
+import WhatsappExportModal from '../components/WhatsappExportModal'
+import { buildWhatsappText } from '../lib/whatsappExport'
 import { useFeedback } from '../lib/FeedbackContext'
 
 const REVISAR_STATUS_ID = 4
@@ -33,9 +36,10 @@ export default function Dashboard() {
   const [freedTasks, setFreedTasks] = useState<FreedTask[] | null>(null)
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
 
-  const [projectFilter, setProjectFilter] = useState('')
-  const [personFilter, setPersonFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [projectFilter, setProjectFilter] = useState<string[]>([])
+  const [personFilter, setPersonFilter] = useState<string[]>([])
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [exportText, setExportText] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -146,9 +150,9 @@ export default function Dashboard() {
         ) return false
       }
 
-      if (projectFilter && t.project_id !== projectFilter) return false
-      if (personFilter && t.responsible_id !== personFilter) return false
-      if (statusFilter && String(t.status_id) !== statusFilter) return false
+      if (projectFilter.length > 0 && !projectFilter.includes(t.project_id ?? '')) return false
+      if (personFilter.length > 0 && !personFilter.includes(t.responsible_id ?? '')) return false
+      if (statusFilter.length > 0 && !statusFilter.includes(String(t.status_id))) return false
       if (search) {
         const s = search.toLowerCase()
         const responsibleName = people.find((p) => p.id === t.responsible_id)?.name ?? ''
@@ -221,6 +225,39 @@ export default function Dashboard() {
     }
   }
 
+  const VIEW_LABELS: Record<Bucket, string> = {
+    none: 'IPA',
+    revision: 'Pendiente Revisión',
+    meDeben: 'Me deben / Prelada',
+    largoPlazo: 'Largo Plazo',
+    todo: 'Todo',
+  }
+
+  // The text mirrors exactly what is on screen: same view (tab), same filters
+  // and search, same order.
+  const openExport = () => {
+    setExportText(
+      buildWhatsappText({
+        tasks: filtered,
+        viewLabel: VIEW_LABELS[bucket],
+        projectNames: projectFilter.map((id) => projectName(id)),
+        personNames: personFilter.map((id) => personById(id)?.name ?? '—'),
+        statusLabels: statusFilter.map((id) => statuses.find((x) => String(x.id) === id)?.label ?? id),
+        search,
+        projectName,
+        personName: (id) => personById(id)?.name ?? '—',
+      })
+    )
+  }
+
+  // With exactly one responsable selected (and a phone on file), WhatsApp
+  // opens straight to their chat.
+  const exportPhone = (() => {
+    if (personFilter.length !== 1) return null
+    const phone = personById(personFilter[0])?.phone
+    return phone ? normalizePhone(phone) : null
+  })()
+
   const emptyMessage =
     bucket === 'meDeben'
       ? 'Nadie te debe nada por ahora.'
@@ -242,12 +279,21 @@ export default function Dashboard() {
         className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base bg-white"
       />
 
-      <button
-        onClick={() => setFiltersOpen((v) => !v)}
-        className="w-full border border-gray-300 rounded-lg py-2 text-sm bg-white"
-      >
-        Filtros {filtersOpen ? '▲' : '▼'}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={() => setFiltersOpen((v) => !v)}
+          className="flex-1 border border-gray-300 rounded-lg py-2 text-sm bg-white"
+        >
+          Filtros{projectFilter.length + personFilter.length + statusFilter.length > 0 ? ` (${projectFilter.length + personFilter.length + statusFilter.length})` : ''} {filtersOpen ? '▲' : '▼'}
+        </button>
+        <button
+          onClick={openExport}
+          disabled={filtered.length === 0}
+          className="border border-green-600 text-green-700 rounded-lg px-4 py-2 text-sm font-medium bg-white disabled:opacity-40"
+        >
+          Enviar por WhatsApp
+        </button>
+      </div>
 
       <div className="flex gap-2">
         <button
@@ -304,36 +350,24 @@ export default function Dashboard() {
 
       {filtersOpen && (
         <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
-          <select
-            value={projectFilter}
-            onChange={(e) => setProjectFilter(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="">Todos los proyectos</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <select
-            value={personFilter}
-            onChange={(e) => setPersonFilter(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="">Todos los responsables</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="">Todos los status</option>
-            {statuses.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
-          </select>
+          <MultiSelect
+            allLabel="Todos los proyectos"
+            options={projects.map((p) => ({ value: p.id, label: p.name }))}
+            selected={projectFilter}
+            onChange={setProjectFilter}
+          />
+          <MultiSelect
+            allLabel="Todos los responsables"
+            options={people.map((p) => ({ value: p.id, label: p.name }))}
+            selected={personFilter}
+            onChange={setPersonFilter}
+          />
+          <MultiSelect
+            allLabel="Todos los status"
+            options={statuses.map((x) => ({ value: String(x.id), label: x.label }))}
+            selected={statusFilter}
+            onChange={setStatusFilter}
+          />
         </div>
       )}
 
@@ -545,6 +579,10 @@ export default function Dashboard() {
       )}
 
       {freedTasks && <FreedTasksModal tasks={freedTasks} onClose={() => setFreedTasks(null)} />}
+
+      {exportText !== null && (
+        <WhatsappExportModal initialText={exportText} phone={exportPhone} onClose={() => setExportText(null)} />
+      )}
     </div>
   )
 }
