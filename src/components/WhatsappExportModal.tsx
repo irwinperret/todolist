@@ -11,9 +11,25 @@ export default function WhatsappExportModal(props: {
   const [text, setText] = useState(props.initialText)
   const [copied, setCopied] = useState(false)
 
-  const openWhatsapp = () => {
+  const isDesktop = !/Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent)
+  const [triedApp, setTriedApp] = useState(false)
+
+  const webUrl = () => {
     const base = props.phone ? `https://wa.me/${props.phone}` : 'https://wa.me/'
-    window.open(`${base}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+    return `${base}?text=${encodeURIComponent(text)}`
+  }
+
+  const openWhatsapp = () => {
+    if (isDesktop) {
+      // On a computer, open the WhatsApp Desktop app through its own link
+      // instead of WhatsApp Web in the browser. The browser may ask once for
+      // permission to open WhatsApp.
+      const phoneParam = props.phone ? `phone=${props.phone}&` : ''
+      window.location.href = `whatsapp://send?${phoneParam}text=${encodeURIComponent(text)}`
+      setTriedApp(true)
+      return
+    }
+    window.open(webUrl(), '_blank', 'noopener,noreferrer')
   }
 
   const copy = async () => {
@@ -44,6 +60,12 @@ export default function WhatsappExportModal(props: {
         <p className="text-xs text-gray-500">
           Puedes editar el texto antes de enviarlo. {props.phone ? 'Se abrirá el chat de ese responsable.' : 'En WhatsApp eliges a quién enviarlo.'}
         </p>
+        {triedApp && (
+          <p className="text-xs text-amber-700">
+            Si no se abrió WhatsApp Desktop, revisa que lo tengas instalado, o{' '}
+            <a href={webUrl()} target="_blank" rel="noopener noreferrer" className="underline">ábrelo en el navegador</a>.
+          </p>
+        )}
         <div className="flex gap-2">
           <button onClick={openWhatsapp} className="flex-1 bg-green-600 text-white rounded-lg py-2.5 text-sm font-medium">
             Abrir WhatsApp
