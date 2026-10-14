@@ -242,7 +242,6 @@ export default function Dashboard() {
         viewLabel: VIEW_LABELS[bucket],
         projectNames: projectFilter.map((id) => projectName(id)),
         personNames: personFilter.map((id) => personById(id)?.name ?? '—'),
-        statusLabels: statusFilter.map((id) => statuses.find((x) => String(x.id) === id)?.label ?? id),
         search,
         projectName,
         personName: (id) => personById(id)?.name ?? '—',
