@@ -15,6 +15,7 @@ import MultiSelect from '../components/MultiSelect'
 import WhatsappExportModal from '../components/WhatsappExportModal'
 import { buildWhatsappText } from '../lib/whatsappExport'
 import { useFeedback } from '../lib/FeedbackContext'
+import { usePersistedState } from '../lib/usePersistedState'
 
 const REVISAR_STATUS_ID = 4
 const LARGO_PLAZO_STATUS_ID = 9
@@ -29,16 +30,18 @@ export default function Dashboard() {
   const { notifyError } = useFeedback()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const [bucket, setBucket] = useState<Bucket>('none')
-  const [search, setSearch] = useState('')
+  // The view (tab), search and filters are remembered while the app is open,
+  // so after editing a task and coming back you land on the same filtered list.
+  const [filtersOpen, setFiltersOpen] = usePersistedState('dash.filtersOpen', false)
+  const [bucket, setBucket] = usePersistedState<Bucket>('dash.bucket', 'none')
+  const [search, setSearch] = usePersistedState('dash.search', '')
   const [contactPerson, setContactPerson] = useState<Person | null>(null)
   const [freedTasks, setFreedTasks] = useState<FreedTask[] | null>(null)
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
 
-  const [projectFilter, setProjectFilter] = useState<string[]>([])
-  const [personFilter, setPersonFilter] = useState<string[]>([])
-  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [projectFilter, setProjectFilter] = usePersistedState<string[]>('dash.projectFilter', [])
+  const [personFilter, setPersonFilter] = usePersistedState<string[]>('dash.personFilter', [])
+  const [statusFilter, setStatusFilter] = usePersistedState<string[]>('dash.statusFilter', [])
   const [exportText, setExportText] = useState<string | null>(null)
 
   const load = async () => {
@@ -240,11 +243,7 @@ export default function Dashboard() {
       buildWhatsappText({
         tasks: filtered,
         viewLabel: VIEW_LABELS[bucket],
-        projectNames: projectFilter.map((id) => projectName(id)),
-        personNames: personFilter.map((id) => personById(id)?.name ?? '—'),
         search,
-        projectName,
-        personName: (id) => personById(id)?.name ?? '—',
       })
     )
   }
