@@ -154,17 +154,30 @@ export function statusPillClass(statusId: number): string {
     : 'bg-amber-100 text-amber-800'
 }
 
-// Pastel palette for project chips. A project with no saved color gets one of
-// these automatically (stable per project), so everything is colored from the
-// start and you only pick a color where you want a different one.
-export const PROJECT_COLORS = [
+// Project chip colors. A project with no saved color automatically gets one
+// of the soft pastels (stable per project), so everything is colored from the
+// start; the vivid ones are only ever used when you pick them yourself.
+export const PASTEL_PROJECT_COLORS = [
   '#FBCFE8', '#FECACA', '#FED7AA', '#FDE68A', '#D9F99D', '#BBF7D0',
   '#99F6E4', '#A5F3FC', '#BFDBFE', '#C7D2FE', '#DDD6FE', '#E5E7EB',
+]
+
+export const VIVID_PROJECT_COLORS = [
+  '#F43F5E', '#EF4444', '#F97316', '#FACC15', '#84CC16', '#22C55E',
+  '#14B8A6', '#06B6D4', '#3B82F6', '#6366F1', '#8B5CF6', '#D946EF',
 ]
 
 export function projectColor(project: Pick<Project, 'id' | 'color'>): string {
   if (project.color) return project.color
   let h = 0
   for (const ch of project.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  return PROJECT_COLORS[h % PROJECT_COLORS.length]
+  return PASTEL_PROJECT_COLORS[h % PASTEL_PROJECT_COLORS.length]
+}
+
+// Dark text on light colors, white text on dark ones.
+export function readableTextColor(hex: string): string {
+  const n = parseInt(hex.slice(1), 16)
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.6 ? '#1f2937' : '#ffffff'
 }

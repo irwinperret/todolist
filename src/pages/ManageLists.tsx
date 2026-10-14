@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import { useFeedback } from '../lib/FeedbackContext'
 import type { Project, Person } from '../lib/types'
-import { PROJECT_COLORS, projectColor } from '../lib/types'
+import { PASTEL_PROJECT_COLORS, VIVID_PROJECT_COLORS, projectColor } from '../lib/types'
 
 export default function ManageLists() {
   const { projects, people, reload } = useLookups()
@@ -172,15 +172,25 @@ export default function ManageLists() {
                   )}
                 </div>
                 {colorPickerFor === p.id && (
-                  <div className="flex flex-wrap gap-2 pb-2 pl-1">
-                    {PROJECT_COLORS.map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => setProjectColor(p.id, c)}
-                        aria-label={`Color ${c}`}
-                        className={`w-8 h-8 rounded-full border ${projectColor(p) === c ? 'ring-2 ring-gray-900 border-white' : 'border-gray-300'}`}
-                        style={{ backgroundColor: c }}
-                      />
+                  <div className="space-y-2 pb-2 pl-1">
+                    {[
+                      { label: 'Suaves', colors: PASTEL_PROJECT_COLORS },
+                      { label: 'Vivos', colors: VIVID_PROJECT_COLORS },
+                    ].map((group) => (
+                      <div key={group.label}>
+                        <p className="text-[11px] text-gray-400 mb-1">{group.label}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {group.colors.map((c) => (
+                            <button
+                              key={c}
+                              onClick={() => setProjectColor(p.id, c)}
+                              aria-label={`Color ${c}`}
+                              className={`w-8 h-8 rounded-full border ${projectColor(p) === c ? 'ring-2 ring-gray-900 border-white' : 'border-gray-300'}`}
+                              style={{ backgroundColor: c }}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
