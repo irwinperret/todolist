@@ -332,15 +332,35 @@ export default function MeetingDetail() {
 
   const addItem = async (minuteId: string, categoryId: string | null, content: string, itemCount: number) => {
     if (!content.trim()) return
+    // Place the new item right after the last unchecked one of its group
+    // (i.e. just above the first checked item), shifting the rest down.
+    const minute = minutes.find((mn) => mn.id === minuteId)
+    const siblings = (minute?.items ?? [])
+      .filter((i) => i.category_id === categoryId)
+      .sort((a, b) => a.sort_order - b.sort_order)
+    let insertAt = siblings.length
+    const firstDone = siblings.findIndex((i) => i.is_done)
+    if (firstDone !== -1) insertAt = firstDone
+    const shifted = siblings
+    const prevOrder = shifted.map((i) => ({ id: i.id, sort_order: i.sort_order }))
+    const newOrder = insertAt
     const { data: created, error } = await supabase
       .from('meeting_items')
-      .insert({ meeting_minute_id: minuteId, category_id: categoryId, content: content.trim(), sort_order: itemCount })
+      .insert({ meeting_minute_id: minuteId, category_id: categoryId, content: content.trim(), sort_order: newOrder })
       .select()
       .single()
     if (error) return notifyError(error.message)
+    if (shifted.length > 0 && created) {
+      await Promise.all(
+        shifted.map((i, idx) => supabase.from('meeting_items').update({ sort_order: idx < insertAt ? idx : idx + 1 }).eq('id', i.id))
+      )
+    }
     if (created) {
       pushUndo(`Agregar "${clip(content.trim())}"`, async () => {
         assertOk(await supabase.from('meeting_items').delete().eq('id', created.id))
+        for (const o of prevOrder) {
+          assertOk(await supabase.from('meeting_items').update({ sort_order: o.sort_order }).eq('id', o.id))
+        }
         await load()
       })
     }
