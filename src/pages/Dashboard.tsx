@@ -303,8 +303,8 @@ export default function Dashboard() {
           onClick={() => setBucket('activas')}
           className={`flex-1 rounded-lg py-2 px-1 text-xs leading-tight border font-medium ${
             bucket === 'activas'
-              ? 'bg-gray-900 text-white border-gray-900'
-              : 'bg-white text-gray-900 border-gray-400'
+              ? 'bg-indigo-200 text-indigo-900 border-indigo-400'
+              : 'bg-white text-indigo-800 border-indigo-300'
           }`}
         >
           Activas
