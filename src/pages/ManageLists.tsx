@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import { useFeedback } from '../lib/FeedbackContext'
+import { assertOk, useUndo } from '../lib/useUndo'
 import type { Project, Person } from '../lib/types'
 import { PASTEL_PROJECT_COLORS, VIVID_PROJECT_COLORS, projectColor } from '../lib/types'
 
 export default function ManageLists() {
   const { projects, people, reload } = useLookups()
   const { notifyError, confirm } = useFeedback()
+  const { push: pushUndo } = useUndo()
   const [newProject, setNewProject] = useState('')
   const [projectsOpen, setProjectsOpen] = useState(false)
   const [peopleOpen, setPeopleOpen] = useState(false)
@@ -43,16 +45,28 @@ export default function ManageLists() {
 
   const saveProjectEdit = async () => {
     if (!editingProjectId || !editingProjectName.trim()) return
+    const prevProject = projects.find((p) => p.id === editingProjectId)
+    const projectId = editingProjectId
     const { error } = await supabase.from('projects').update({ name: editingProjectName.trim() }).eq('id', editingProjectId)
     if (!error) {
+      if (prevProject) pushUndo(`Nombre del proyecto "${prevProject.name}"`, async () => {
+        assertOk(await supabase.from('projects').update({ name: prevProject.name }).eq('id', projectId))
+        reload()
+      })
       setEditingProjectId(null)
       reload()
     } else notifyError(error.message)
   }
 
   const setProjectColor = async (id: string, color: string) => {
+    const prevColor = projects.find((p) => p.id === id)?.color ?? null
+    const prevName = projects.find((p) => p.id === id)?.name ?? ''
     const { error } = await supabase.from('projects').update({ color }).eq('id', id)
     if (error) return notifyError(error.message)
+    pushUndo(`Color de "${prevName}"`, async () => {
+      assertOk(await supabase.from('projects').update({ color: prevColor }).eq('id', id))
+      reload()
+    })
     setColorPickerFor(null)
     reload()
   }
@@ -98,6 +112,8 @@ export default function ManageLists() {
 
   const savePersonEdit = async () => {
     if (!editingPersonId || !editingPersonName.trim()) return
+    const prevPerson = people.find((p) => p.id === editingPersonId)
+    const personId = editingPersonId
     const { error } = await supabase.from('people').update({
       name: editingPersonName.trim(),
       role: editingPersonRole.trim() || null,
@@ -105,6 +121,12 @@ export default function ManageLists() {
       phone: editingPersonPhone.trim() || null,
     }).eq('id', editingPersonId)
     if (!error) {
+      if (prevPerson) pushUndo(`Responsable "${prevPerson.name}"`, async () => {
+        assertOk(await supabase.from('people').update({
+          name: prevPerson.name, role: prevPerson.role, email: prevPerson.email, phone: prevPerson.phone,
+        }).eq('id', personId))
+        reload()
+      })
       setEditingPersonId(null)
       reload()
     } else notifyError(error.message)

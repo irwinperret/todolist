@@ -17,7 +17,6 @@ import { buildWhatsappText } from '../lib/whatsappExport'
 import { useFeedback } from '../lib/FeedbackContext'
 import { usePersistedState } from '../lib/usePersistedState'
 import { assertOk, useUndo } from '../lib/useUndo'
-import UndoButton from '../components/UndoButton'
 
 const REVISAR_STATUS_ID = 4
 const LARGO_PLAZO_STATUS_ID = 9
@@ -30,7 +29,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { projects, people, statuses, priorities, projectName, projectColor, personById } = useLookups()
   const { notifyError } = useFeedback()
-  const { push: pushUndo, undo, canUndo, lastLabel, busy: undoBusy } = useUndo(notifyError)
+  const { push: pushUndo } = useUndo()
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
   // The view (tab), search and filters are remembered while the app is open,
@@ -633,8 +632,6 @@ export default function Dashboard() {
       {exportText !== null && (
         <WhatsappExportModal initialText={exportText} phone={exportPhone} onClose={() => setExportText(null)} />
       )}
-
-      <UndoButton canUndo={canUndo} label={lastLabel} busy={undoBusy} onUndo={undo} />
     </div>
   )
 }

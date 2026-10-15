@@ -7,6 +7,7 @@ import { useFormatShortcuts, formatRichText, FormatToolbar } from '../components
 import { getFreedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
 import { useFeedback } from '../lib/FeedbackContext'
+import { assertOk, useUndo } from '../lib/useUndo'
 
 type DependencyLite = TaskLite & { resolved_at: string | null }
 
@@ -15,6 +16,7 @@ export default function TaskDetail() {
   const isNew = id === 'new' || !id
   const navigate = useNavigate()
   const { notifyError, confirm } = useFeedback()
+  const { push: pushUndo } = useUndo()
   const location = useLocation()
   const fromMeetingId = (location.state as { fromMeetingId?: string } | null)?.fromMeetingId
   const returnTo = fromMeetingId ? `/meetings/${fromMeetingId}` : '/'
@@ -209,6 +211,8 @@ export default function TaskDetail() {
       draftIdRef.current = null
       navigate(`/task/${data.id}`, { replace: true })
     } else {
+      const { data: prevRow } = await supabase.from('tasks').select('*').eq('id', id).single()
+      const { data: prevItems } = await supabase.from('meeting_items').select('id, content, comment, is_done').eq('task_id', id)
       const { error } = await supabase.from('tasks').update(payload).eq('id', id)
       if (error) {
         setSaving(false)
@@ -217,6 +221,17 @@ export default function TaskDetail() {
       const meetingError = await syncMeetingItems(id!, payload.title, payload.comment, payload.status_id)
       setSaving(false)
       if (meetingError) return notifyError(meetingError.message)
+      if (prevRow) {
+        const prev: Record<string, unknown> = {}
+        for (const k of Object.keys(payload)) prev[k] = (prevRow as Record<string, unknown>)[k] ?? null
+        const taskId = id!
+        pushUndo(`Edición de "${String(prevRow.title ?? '').slice(0, 30)}"`, async () => {
+          assertOk(await supabase.from('tasks').update(prev).eq('id', taskId))
+          for (const it of prevItems ?? []) {
+            assertOk(await supabase.from('meeting_items').update({ content: it.content, comment: it.comment, is_done: it.is_done }).eq('id', it.id))
+          }
+        })
+      }
       draftIdRef.current = null
       navigate(returnTo)
     }

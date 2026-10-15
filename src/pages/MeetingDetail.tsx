@@ -17,7 +17,6 @@ import { copyMeetingExportToClipboard } from '../lib/meetingExport'
 import { useFab } from '../lib/FabContext'
 import { useFeedback } from '../lib/FeedbackContext'
 import { assertOk, useUndo } from '../lib/useUndo'
-import UndoButton from '../components/UndoButton'
 import { useLookups } from '../lib/useLookups'
 import { RichText, RichTextArea, formatRichText, useFormatShortcuts } from '../components/RichText'
 import type { Meeting, MeetingMinute, MeetingItem, MeetingCategory, TaskScore, Project, Person, Status, PriorityLevel } from '../lib/types'
@@ -82,7 +81,7 @@ export default function MeetingDetail() {
   const { id } = useParams()
   const { setFab } = useFab()
   const { notifyError, confirm } = useFeedback()
-  const { push: pushUndo, undo, canUndo, lastLabel, busy: undoBusy } = useUndo(notifyError)
+  const { push: pushUndo } = useUndo()
   const { projects, people, statuses, priorities } = useLookups()
   const [meeting, setMeeting] = useState<Meeting | null>(null)
   const [minutes, setMinutes] = useState<MinuteWithData[]>([])
@@ -330,7 +329,7 @@ export default function MeetingDetail() {
     load()
   }
 
-  const addItem = async (minuteId: string, categoryId: string | null, content: string, itemCount: number) => {
+  const addItem = async (minuteId: string, categoryId: string | null, content: string, _itemCount: number) => {
     if (!content.trim()) return
     // Place the new item right after the last unchecked one of its group
     // (i.e. just above the first checked item), shifting the rest down.
@@ -621,8 +620,6 @@ export default function MeetingDetail() {
           />
         ))}
       </div>
-
-      <UndoButton canUndo={canUndo} label={lastLabel} busy={undoBusy} onUndo={undo} />
     </div>
   )
 }

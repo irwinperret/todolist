@@ -2,6 +2,9 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 import { useFab } from '../lib/FabContext'
 import OfflineBadge from './OfflineBadge'
+import UndoButton from './UndoButton'
+import { useUndoControls } from '../lib/useUndo'
+import { useFeedback } from '../lib/FeedbackContext'
 
 const navItems = [
   { to: '/', label: 'To Do', icon: '📋' },
@@ -16,6 +19,8 @@ export default function Layout() {
   const { signOut } = useAuth()
   const navigate = useNavigate()
   const { fab } = useFab()
+  const { notifyError } = useFeedback()
+  const { undo, canUndo, lastLabel, busy } = useUndoControls(notifyError)
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -46,6 +51,8 @@ export default function Layout() {
       >
         +
       </button>
+
+      <UndoButton canUndo={canUndo} label={lastLabel} busy={busy} onUndo={undo} />
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex">
         {navItems.map((item) => (
