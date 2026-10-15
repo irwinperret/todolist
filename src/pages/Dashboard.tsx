@@ -21,7 +21,7 @@ const REVISAR_STATUS_ID = 4
 const LARGO_PLAZO_STATUS_ID = 9
 const RUTINA_STATUS_ID = 10
 
-type Bucket = 'none' | 'meDeben' | 'revision' | 'largoPlazo' | 'todo'
+type Bucket = 'activas' | 'none' | 'meDeben' | 'revision' | 'largoPlazo' | 'todo'
 type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 
 export default function Dashboard() {
@@ -33,7 +33,7 @@ export default function Dashboard() {
   // The view (tab), search and filters are remembered while the app is open,
   // so after editing a task and coming back you land on the same filtered list.
   const [filtersOpen, setFiltersOpen] = usePersistedState('dash.filtersOpen', false)
-  const [bucket, setBucket] = usePersistedState<Bucket>('dash.bucket', 'none')
+  const [bucket, setBucket] = usePersistedState<Bucket>('dash.bucket', 'activas')
   const [search, setSearch] = usePersistedState('dash.search', '')
   const [contactPerson, setContactPerson] = useState<Person | null>(null)
   const [freedTasks, setFreedTasks] = useState<FreedTask[] | null>(null)
@@ -114,7 +114,7 @@ export default function Dashboard() {
   }
 
   const toggleBucket = (b: Bucket) => {
-    setBucket((current) => (current === b ? 'none' : b))
+    setBucket((current) => (current === b ? 'activas' : b))
   }
 
   // Me deben always includes status Me deben and Recurrente, plus anything
@@ -138,6 +138,10 @@ export default function Dashboard() {
       // hidden from the normal list otherwise.
       if (bucket === 'todo') {
         // no status-based filtering at all, just project/person/status/search below
+      } else if (bucket === 'activas') {
+        // IPA + Pendiente Revisión + Me deben/Prelada together: everything
+        // that is alive, leaving out only Largo Plazo and Rutinas.
+        if (t.status_id === LARGO_PLAZO_STATUS_ID || t.status_id === RUTINA_STATUS_ID) return false
       } else if (bucket === 'meDeben') {
         if (!belongsToMeDeben(t)) return false
       } else if (bucket === 'revision') {
@@ -229,6 +233,7 @@ export default function Dashboard() {
   }
 
   const VIEW_LABELS: Record<Bucket, string> = {
+    activas: 'Activas',
     none: 'IPA',
     revision: 'Pendiente Revisión',
     meDeben: 'Me deben / Prelada',
@@ -293,10 +298,20 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-1.5">
+        <button
+          onClick={() => setBucket('activas')}
+          className={`flex-1 rounded-lg py-2 px-1 text-xs leading-tight border font-medium ${
+            bucket === 'activas'
+              ? 'bg-gray-900 text-white border-gray-900'
+              : 'bg-white text-gray-900 border-gray-400'
+          }`}
+        >
+          Activas
+        </button>
         <button
           onClick={() => setBucket('none')}
-          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+          className={`flex-1 rounded-lg py-2 px-1 text-xs leading-tight border font-medium ${
             bucket === 'none'
               ? 'bg-gray-900 text-white border-gray-900'
               : 'bg-white text-gray-700 border-gray-300'
@@ -306,7 +321,7 @@ export default function Dashboard() {
         </button>
         <button
           onClick={() => toggleBucket('revision')}
-          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+          className={`flex-1 rounded-lg py-2 px-1 text-xs leading-tight border font-medium ${
             bucket === 'revision'
               ? 'bg-[#dbe7f0] text-blue-900 border-[#c3d8e6]'
               : 'bg-white text-blue-800 border-gray-300'
@@ -316,7 +331,7 @@ export default function Dashboard() {
         </button>
         <button
           onClick={() => toggleBucket('meDeben')}
-          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+          className={`flex-1 rounded-lg py-2 px-1 text-xs leading-tight border font-medium ${
             bucket === 'meDeben'
               ? 'bg-[#e8ddd3] text-red-900 border-[#d8c7b5]'
               : 'bg-white text-red-800 border-gray-300'
@@ -326,7 +341,7 @@ export default function Dashboard() {
         </button>
         <button
           onClick={() => toggleBucket('largoPlazo')}
-          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+          className={`flex-1 rounded-lg py-2 px-1 text-xs leading-tight border font-medium ${
             bucket === 'largoPlazo'
               ? 'bg-gray-300 text-gray-700 border-gray-400'
               : 'bg-white text-gray-500 border-gray-300'
@@ -336,7 +351,7 @@ export default function Dashboard() {
         </button>
         <button
           onClick={() => toggleBucket('todo')}
-          className={`flex-1 rounded-lg py-2 text-sm border font-medium ${
+          className={`flex-1 rounded-lg py-2 px-1 text-xs leading-tight border font-medium ${
             bucket === 'todo'
               ? 'bg-green-100 text-green-800 border-green-300'
               : 'bg-white text-green-700 border-gray-300'
