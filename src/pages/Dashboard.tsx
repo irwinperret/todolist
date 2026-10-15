@@ -16,6 +16,8 @@ import WhatsappExportModal from '../components/WhatsappExportModal'
 import { buildWhatsappText } from '../lib/whatsappExport'
 import { useFeedback } from '../lib/FeedbackContext'
 import { usePersistedState } from '../lib/usePersistedState'
+import { assertOk, useUndo } from '../lib/useUndo'
+import UndoButton from '../components/UndoButton'
 
 const REVISAR_STATUS_ID = 4
 const LARGO_PLAZO_STATUS_ID = 9
@@ -28,6 +30,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { projects, people, statuses, priorities, projectName, projectColor, personById } = useLookups()
   const { notifyError } = useFeedback()
+  const { push: pushUndo, undo, canUndo, lastLabel, busy: undoBusy } = useUndo(notifyError)
   const [tasks, setTasks] = useState<TaskScore[]>([])
   const [loading, setLoading] = useState(true)
   // The view (tab), search and filters are remembered while the app is open,
@@ -63,6 +66,15 @@ export default function Dashboard() {
   }, [])
 
   const updateStatus = async (taskId: string, newStatusId: number, blockingCount: number) => {
+    // Remember everything this change is about to touch so it can be undone:
+    // the task's own fields, the linked meeting items' checkboxes, and the
+    // prelaciones that completing a task resolves.
+    const prevTask = tasks.find((x) => x.id === taskId)
+    const [{ data: prevItems }, { data: prevDeps }] = await Promise.all([
+      supabase.from('meeting_items').select('id, is_done').eq('task_id', taskId),
+      supabase.from('task_dependencies').select('task_id, resolved_at').eq('depends_on_task_id', taskId),
+    ])
+
     const payload: { status_id: number; resolved_at?: string; rutina_frequency?: string | null } =
       newStatusId === 8 ? { status_id: 8, resolved_at: new Date().toISOString() } : { status_id: newStatusId }
 
@@ -104,12 +116,37 @@ export default function Dashboard() {
       await supabase.from('task_dependencies').update({ resolved_at: null }).eq('depends_on_task_id', taskId)
     }
 
+    if (prevTask) {
+      pushUndo(`Status de "${prevTask.title.slice(0, 24)}"`, async () => {
+        assertOk(await supabase.from('tasks').update({
+          status_id: prevTask.status_id,
+          resolved_at: prevTask.resolved_at,
+          rutina_frequency: prevTask.rutina_frequency,
+        }).eq('id', taskId))
+        for (const it of prevItems ?? []) {
+          assertOk(await supabase.from('meeting_items').update({ is_done: it.is_done }).eq('id', it.id))
+        }
+        for (const d of prevDeps ?? []) {
+          assertOk(await supabase.from('task_dependencies').update({ resolved_at: d.resolved_at })
+            .eq('task_id', d.task_id).eq('depends_on_task_id', taskId))
+        }
+        await load()
+      })
+    }
+
     load()
   }
 
   const updatePriority = async (taskId: string, newPriorityId: number) => {
+    const prevTask = tasks.find((x) => x.id === taskId)
     const { error } = await supabase.from('tasks').update({ priority_id: newPriorityId }).eq('id', taskId)
     if (error) return notifyError(error.message)
+    if (prevTask) {
+      pushUndo(`Prioridad de "${prevTask.title.slice(0, 24)}"`, async () => {
+        assertOk(await supabase.from('tasks').update({ priority_id: prevTask.priority_id }).eq('id', taskId))
+        await load()
+      })
+    }
     load()
   }
 
@@ -596,6 +633,8 @@ export default function Dashboard() {
       {exportText !== null && (
         <WhatsappExportModal initialText={exportText} phone={exportPhone} onClose={() => setExportText(null)} />
       )}
+
+      <UndoButton canUndo={canUndo} label={lastLabel} busy={undoBusy} onUndo={undo} />
     </div>
   )
 }

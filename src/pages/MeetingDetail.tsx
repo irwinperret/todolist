@@ -16,6 +16,8 @@ import { supabase } from '../lib/supabase'
 import { copyMeetingExportToClipboard } from '../lib/meetingExport'
 import { useFab } from '../lib/FabContext'
 import { useFeedback } from '../lib/FeedbackContext'
+import { assertOk, useUndo } from '../lib/useUndo'
+import UndoButton from '../components/UndoButton'
 import { useLookups } from '../lib/useLookups'
 import { RichText, RichTextArea, formatRichText, useFormatShortcuts } from '../components/RichText'
 import type { Meeting, MeetingMinute, MeetingItem, MeetingCategory, TaskScore, Project, Person, Status, PriorityLevel } from '../lib/types'
@@ -80,6 +82,7 @@ export default function MeetingDetail() {
   const { id } = useParams()
   const { setFab } = useFab()
   const { notifyError, confirm } = useFeedback()
+  const { push: pushUndo, undo, canUndo, lastLabel, busy: undoBusy } = useUndo(notifyError)
   const { projects, people, statuses, priorities } = useLookups()
   const [meeting, setMeeting] = useState<Meeting | null>(null)
   const [minutes, setMinutes] = useState<MinuteWithData[]>([])
@@ -259,12 +262,26 @@ export default function MeetingDetail() {
     load()
   }
 
+  // Lookups into what is currently on screen, used to remember "before" values
+  // so a change can be undone.
+  const allItems = () => minutes.flatMap((mn) => mn.items)
+  const allCategories = () => minutes.flatMap((mn) => mn.categories)
+  const clip = (t: string) => (t.length > 24 ? `${t.slice(0, 24)}…` : t)
+
   const addCategory = async (minuteId: string, parentId: string | null, name: string, siblingCount: number) => {
     if (!name.trim()) return
-    const { error } = await supabase
+    const { data: created, error } = await supabase
       .from('meeting_categories')
       .insert({ meeting_minute_id: minuteId, parent_id: parentId, name: name.trim(), sort_order: siblingCount })
+      .select()
+      .single()
     if (error) return notifyError(error.message)
+    if (created) {
+      pushUndo(`Categoría "${clip(name.trim())}"`, async () => {
+        assertOk(await supabase.from('meeting_categories').delete().eq('id', created.id))
+        await load()
+      })
+    }
     load()
   }
 
@@ -275,50 +292,98 @@ export default function MeetingDetail() {
 
   const saveRenameCategory = async () => {
     if (!editingCategoryId || !editingCategoryName.trim()) return
-    await supabase.from('meeting_categories').update({ name: editingCategoryName.trim() }).eq('id', editingCategoryId)
+    const renamedId = editingCategoryId
+    const prevName = allCategories().find((c) => c.id === renamedId)?.name
+    await supabase.from('meeting_categories').update({ name: editingCategoryName.trim() }).eq('id', renamedId)
+    if (prevName !== undefined) {
+      pushUndo(`Nombre de "${clip(prevName)}"`, async () => {
+        assertOk(await supabase.from('meeting_categories').update({ name: prevName }).eq('id', renamedId))
+        await load()
+      })
+    }
     setEditingCategoryId(null)
     load()
   }
 
   const deleteCategory = async (cat: MeetingCategory) => {
     if (!(await confirm(`¿Borrar "${cat.name}"? Si tiene subcategorías, también se borran. Los items que tenía quedan como "Sin categoría", no se pierden. No se puede deshacer.`, { danger: true, confirmLabel: 'Borrar' }))) return
+    // Capture the category, its subcategories and the items inside them first.
+    const cats = allCategories()
+    const subtree: MeetingCategory[] = []
+    const queue = [cats.find((c) => c.id === cat.id) ?? cat]
+    while (queue.length) {
+      const c = queue.shift()!
+      subtree.push(c)
+      queue.push(...cats.filter((x) => x.parent_id === c.id))
+    }
+    const subtreeIds = new Set(subtree.map((c) => c.id))
+    const affectedItems = allItems().filter((it) => it.category_id && subtreeIds.has(it.category_id))
+
     const { error } = await supabase.from('meeting_categories').delete().eq('id', cat.id)
     if (error) return notifyError(error.message)
+    pushUndo(`Borrar categoría "${clip(cat.name)}"`, async () => {
+      // subtree is ordered parents-first, so parent_id references exist.
+      for (const c of subtree) assertOk(await supabase.from('meeting_categories').insert(c))
+      if (affectedItems.length > 0) assertOk(await supabase.from('meeting_items').upsert(affectedItems))
+      await load()
+    })
     load()
   }
 
   const addItem = async (minuteId: string, categoryId: string | null, content: string, itemCount: number) => {
     if (!content.trim()) return
-    const { error } = await supabase
+    const { data: created, error } = await supabase
       .from('meeting_items')
       .insert({ meeting_minute_id: minuteId, category_id: categoryId, content: content.trim(), sort_order: itemCount })
+      .select()
+      .single()
     if (error) return notifyError(error.message)
+    if (created) {
+      pushUndo(`Agregar "${clip(content.trim())}"`, async () => {
+        assertOk(await supabase.from('meeting_items').delete().eq('id', created.id))
+        await load()
+      })
+    }
     load()
   }
 
   const saveItemContent = async (item: MeetingItem, content: string) => {
     if (!content.trim()) return
+    const prevTaskTitle = item.task_id ? taskById[item.task_id]?.title : undefined
     const { error } = await supabase.from('meeting_items').update({ content: content.trim() }).eq('id', item.id)
     if (error) return notifyError(error.message)
     if (item.task_id) {
       await supabase.from('tasks').update({ title: content.trim() }).eq('id', item.task_id)
     }
+    pushUndo(`Texto de "${clip(item.content)}"`, async () => {
+      assertOk(await supabase.from('meeting_items').update({ content: item.content }).eq('id', item.id))
+      if (item.task_id && prevTaskTitle !== undefined) {
+        assertOk(await supabase.from('tasks').update({ title: prevTaskTitle }).eq('id', item.task_id))
+      }
+      await load()
+    })
     load()
   }
 
   const deleteItem = async (item: MeetingItem) => {
     if (!(await confirm('¿Borrar este item? Si está sincronizado con una tarea, la tarea NO se borra, solo se desvincula.', { danger: true, confirmLabel: 'Borrar' }))) return
     await supabase.from('meeting_items').delete().eq('id', item.id)
+    pushUndo(`Borrar "${clip(item.content)}"`, async () => {
+      assertOk(await supabase.from('meeting_items').insert(item))
+      await load()
+    })
     load()
   }
 
   const toggleDone = async (item: MeetingItem) => {
     const nextDone = !item.is_done
+    const prevTaskStatus = item.task_id ? taskById[item.task_id]?.status_id : undefined
     const { error } = await supabase.from('meeting_items').update({ is_done: nextDone }).eq('id', item.id)
     if (error) return notifyError(error.message)
     if (item.task_id) {
       await supabase.from('tasks').update({ status_id: nextDone ? 8 : 2 }).eq('id', item.task_id)
     }
+    let prevOrder: { id: string; sort_order: number }[] = []
     if (nextDone) {
       // Sink the checked item to the bottom of its own category/subcategory.
       // This only sets the initial position right after checking it off —
@@ -330,27 +395,50 @@ export default function MeetingDetail() {
           .filter((i) => i.category_id === item.category_id && i.id !== item.id)
           .sort((a, b) => a.sort_order - b.sort_order)
         const ordered = [...siblings, item]
+        prevOrder = ordered.map((i) => ({ id: i.id, sort_order: i.sort_order }))
         await Promise.all(
           ordered.map((i, idx) => supabase.from('meeting_items').update({ sort_order: idx }).eq('id', i.id))
         )
       }
     }
+    pushUndo(`${nextDone ? 'Check' : 'Uncheck'} "${clip(item.content)}"`, async () => {
+      assertOk(await supabase.from('meeting_items').update({ is_done: item.is_done }).eq('id', item.id))
+      if (item.task_id && prevTaskStatus !== undefined) {
+        assertOk(await supabase.from('tasks').update({ status_id: prevTaskStatus }).eq('id', item.task_id))
+      }
+      for (const o of prevOrder) {
+        assertOk(await supabase.from('meeting_items').update({ sort_order: o.sort_order }).eq('id', o.id))
+      }
+      await load()
+    })
     load()
   }
 
   const toggleLongTerm = async (item: MeetingItem) => {
     const { error } = await supabase.from('meeting_items').update({ is_long_term: !item.is_long_term }).eq('id', item.id)
     if (error) return notifyError(error.message)
+    pushUndo(`Largo plazo de "${clip(item.content)}"`, async () => {
+      assertOk(await supabase.from('meeting_items').update({ is_long_term: item.is_long_term }).eq('id', item.id))
+      await load()
+    })
     load()
   }
 
   const saveItemComment = async (item: MeetingItem, comment: string) => {
     const cleanComment = comment.trim() || null
+    const prevTaskComment = item.task_id ? taskById[item.task_id]?.comment : undefined
     const { error } = await supabase.from('meeting_items').update({ comment: cleanComment }).eq('id', item.id)
     if (error) return notifyError(error.message)
     if (item.task_id) {
       await supabase.from('tasks').update({ comment: cleanComment }).eq('id', item.task_id)
     }
+    pushUndo(`Comentario de "${clip(item.content)}"`, async () => {
+      assertOk(await supabase.from('meeting_items').update({ comment: item.comment }).eq('id', item.id))
+      if (item.task_id && prevTaskComment !== undefined) {
+        assertOk(await supabase.from('tasks').update({ comment: prevTaskComment }).eq('id', item.task_id))
+      }
+      await load()
+    })
     load()
   }
 
@@ -404,9 +492,20 @@ export default function MeetingDetail() {
   }
 
   const reorderItems = async (updates: { id: string; category_id: string | null; sort_order: number }[]) => {
+    const before = allItems()
+    const previous = updates
+      .map((u) => before.find((i) => i.id === u.id))
+      .filter((i): i is MeetingItem => Boolean(i))
+      .map((i) => ({ id: i.id, category_id: i.category_id, sort_order: i.sort_order }))
     await Promise.all(
       updates.map((u) => supabase.from('meeting_items').update({ category_id: u.category_id, sort_order: u.sort_order }).eq('id', u.id))
     )
+    pushUndo('Mover item', async () => {
+      for (const p of previous) {
+        assertOk(await supabase.from('meeting_items').update({ category_id: p.category_id, sort_order: p.sort_order }).eq('id', p.id))
+      }
+      await load()
+    })
     load()
   }
 
@@ -502,6 +601,8 @@ export default function MeetingDetail() {
           />
         ))}
       </div>
+
+      <UndoButton canUndo={canUndo} label={lastLabel} busy={undoBusy} onUndo={undo} />
     </div>
   )
 }
