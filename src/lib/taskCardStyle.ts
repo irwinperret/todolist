@@ -15,7 +15,7 @@ export function isUrgentCard(t: TaskScore): boolean {
 export function getTaskCardStyle(t: TaskScore, options?: { includeFollowUp?: boolean }): string {
   const includeFollowUp = options?.includeFollowUp ?? true
 
-  if (isUrgentCard(t)) return 'bg-red-300 border-red-600'
+  if (isUrgentCard(t)) return 'bg-red-200 border-red-500'
 
   const overdue = isOverdue(t.due_date, t.status_id)
   if (overdue) return 'bg-red-50 border-red-300'
