@@ -6,8 +6,16 @@ import { isOverdue } from './calendar'
 // simpler 3-state version (no orange follow-up highlight, since every task
 // there already has a due date shown in the row). Kept as an option instead
 // of unifying the visuals outright, so this refactor changes no behavior.
+// Urgent (priority 1) cards get a strong red banner, more vivid than the
+// pale red of overdue cards. Completed tasks are left alone.
+export function isUrgentCard(t: TaskScore): boolean {
+  return t.priority_id === 1 && t.status_id !== 8
+}
+
 export function getTaskCardStyle(t: TaskScore, options?: { includeFollowUp?: boolean }): string {
   const includeFollowUp = options?.includeFollowUp ?? true
+
+  if (isUrgentCard(t)) return 'bg-red-300 border-red-600'
 
   const overdue = isOverdue(t.due_date, t.status_id)
   if (overdue) return 'bg-red-50 border-red-300'
