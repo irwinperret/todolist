@@ -5,7 +5,7 @@ import { useLookups } from '../lib/useLookups'
 import type { Person, TaskScore } from '../lib/types'
 import { PRIORITY_COLORS, statusPillClass } from '../lib/types'
 import { isOverdue, formatTaskAge } from '../lib/calendar'
-import { getTaskCardStyle } from '../lib/taskCardStyle'
+import { getTaskCardStyle, isUrgentCard } from '../lib/taskCardStyle'
 import { formatRichText } from '../components/RichText'
 import { getFreedTasks, reconcilePostponedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
@@ -433,6 +433,7 @@ export default function Dashboard() {
           const isExpanded = expandedTaskId === t.id
           const overdue = isOverdue(t.due_date, t.status_id)
           const cardBg = getTaskCardStyle(t)
+          const urgent = isUrgentCard(t)
 
           return (
             <div
@@ -447,7 +448,7 @@ export default function Dashboard() {
                 <div className="min-w-0">
                   <p className="text-gray-900" dangerouslySetInnerHTML={{ __html: formatRichText(t.title) }} />
                   {t.subactivity && (
-                    <p className="text-sm text-gray-500">{t.subactivity}</p>
+                    <p className={`text-sm ${urgent ? 'text-gray-800' : 'text-gray-500'}`}>{t.subactivity}</p>
                   )}
                 </div>
 
@@ -476,7 +477,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 mt-2 text-xs text-gray-400 flex-wrap">
+              <div className={`flex items-center gap-2 mt-2 text-xs ${urgent ? 'text-gray-800' : 'text-gray-400'} flex-wrap`}>
                 <ProjectChip name={projectName(t.project_id)} color={projectColor(t.project_id)} />
                 <span>·</span>
                 {hasContact ? (
@@ -497,7 +498,7 @@ export default function Dashboard() {
                 {t.due_date && (
                   <>
                     <span>·</span>
-                    <span className={overdue ? 'text-red-600 font-semibold' : ''}>
+                    <span className={overdue ? (urgent ? 'text-red-900 font-bold' : 'text-red-600 font-semibold') : ''}>
                       {overdue ? 'venció el ' : 'vence '}
                       {new Date(t.due_date + 'T00:00:00').toLocaleDateString()}
                     </span>
@@ -506,7 +507,7 @@ export default function Dashboard() {
                 {t.blocking_count > 0 && (
                   <>
                     <span>·</span>
-                    <span className="text-red-500 font-medium">
+                    <span className={urgent ? 'text-red-900 font-bold' : 'text-red-500 font-medium'}>
                       bloquea {t.blocking_count} {t.blocking_count === 1 ? 'tarea' : 'tareas'}
                     </span>
                   </>
