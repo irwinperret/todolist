@@ -5,6 +5,7 @@ import { useLookups } from '../lib/useLookups'
 import type { Person, TaskScore } from '../lib/types'
 import { PRIORITY_COLORS, statusPillClass } from '../lib/types'
 import { isOverdue, formatTaskAge } from '../lib/calendar'
+import DependencyList from '../components/DependencyList'
 import { getTaskCardStyle, isUrgentCard } from '../lib/taskCardStyle'
 import { formatRichText } from '../components/RichText'
 import { getFreedTasks, reconcilePostponedTasks, type FreedTask } from '../lib/dependencies'
@@ -504,13 +505,11 @@ export default function Dashboard() {
                     </span>
                   </>
                 )}
+                {t.pending_dependency_count > 0 && (
+                  <DependencyList taskId={t.id} direction="blockedBy" count={t.pending_dependency_count} urgent={urgent} personName={(pid) => personById(pid)?.name ?? '—'} />
+                )}
                 {t.blocking_count > 0 && (
-                  <>
-                    <span>·</span>
-                    <span className={urgent ? 'text-red-900 font-bold' : 'text-red-500 font-medium'}>
-                      bloquea {t.blocking_count} {t.blocking_count === 1 ? 'tarea' : 'tareas'}
-                    </span>
-                  </>
+                  <DependencyList taskId={t.id} direction="blocks" count={t.blocking_count} urgent={urgent} personName={(pid) => personById(pid)?.name ?? '—'} />
                 )}
                 <span className="ml-auto text-xs text-gray-700" title={formatTaskAge(t.created_at).full}>
                   {formatTaskAge(t.created_at).label}
