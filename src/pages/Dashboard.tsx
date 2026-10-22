@@ -435,6 +435,7 @@ export default function Dashboard() {
           const overdue = isOverdue(t.due_date, t.status_id)
           const cardBg = getTaskCardStyle(t)
           const urgent = isUrgentCard(t)
+          const dimText = urgent ? 'text-gray-700' : 'text-gray-400'
 
           return (
             <div
@@ -520,38 +521,38 @@ export default function Dashboard() {
                 <div className="mt-3 pt-3 border-t border-gray-100 space-y-2 text-sm">
                   {person && (
                     <p>
-                      <span className="text-gray-400">Subcontratista/responsable: </span>
+                      <span className={dimText}>Subcontratista/responsable: </span>
                       <span className="text-gray-800">{person.name}{person.role ? ` (${person.role})` : ''}</span>
                     </p>
                   )}
                   {indirectPerson && (
                     <p>
-                      <span className="text-gray-400">Involucrado: </span>
+                      <span className={dimText}>Involucrado: </span>
                       <span className="text-gray-800">{indirectPerson.name}</span>
                     </p>
                   )}
                   {t.discipline && (
-                    <p><span className="text-gray-400">Disciplina: </span><span className="text-gray-800">{t.discipline}</span></p>
+                    <p><span className={dimText}>Disciplina: </span><span className="text-gray-800">{t.discipline}</span></p>
                   )}
                   {t.location && (
-                    <p><span className="text-gray-400">Ubicación: </span><span className="text-gray-800">{t.location}</span></p>
+                    <p><span className={dimText}>Ubicación: </span><span className="text-gray-800">{t.location}</span></p>
                   )}
                   {t.comment && (
                     <div>
-                      <p className="text-gray-400">Notas:</p>
+                      <p className={dimText}>Notas:</p>
                       <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatRichText(t.comment) }} />
                     </div>
                   )}
                   {t.resolution_notes && (
                     <div>
-                      <p className="text-gray-400">Resolución:</p>
+                      <p className={dimText}>Resolución:</p>
                       <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatRichText(t.resolution_notes) }} />
                     </div>
                   )}
                   {!person && !indirectPerson && !t.discipline && !t.location && !t.comment && !t.resolution_notes && (
-                    <p className="text-gray-400 italic">Sin más detalle agregado.</p>
+                    <p className={`${dimText} italic`}>Sin más detalle agregado.</p>
                   )}
-                  <p className="text-xs text-gray-300 pt-1">Toca de nuevo para editar</p>
+                  <p className={`text-xs ${urgent ? 'text-gray-700' : 'text-gray-300'} pt-1`}>Toca de nuevo para editar</p>
                 </div>
               )}
             </div>
