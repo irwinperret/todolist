@@ -1,3 +1,4 @@
+import InlinePicker from '../components/InlinePicker'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
@@ -1165,14 +1166,8 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
       <div ref={setNodeRef} style={dragStyle} className="border border-gray-200 rounded-lg p-2 space-y-2">
         <p className="text-sm text-gray-800 whitespace-normal break-words" dangerouslySetInnerHTML={{ __html: formatRichText(item.content) }} />
         {commentEditor}
-        <select value={actions.convProject} onChange={(e) => actions.setConvProject(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
-          <option value="">Proyecto *</option>
-          {actions.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select value={actions.convResponsible} onChange={(e) => actions.setConvResponsible(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
-          <option value="">Responsable *</option>
-          {actions.people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <InlinePicker compact value={actions.convProject} placeholder="Proyecto *" options={actions.projects.map((p) => ({ value: p.id, label: p.name }))} onChange={actions.setConvProject} />
+        <InlinePicker compact value={actions.convResponsible} placeholder="Responsable *" options={actions.people.map((p) => ({ value: p.id, label: p.name }))} onChange={actions.setConvResponsible} />
         <div className="grid grid-cols-2 gap-2">
           <select value={actions.convPriority} onChange={(e) => actions.setConvPriority(Number(e.target.value))} className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
             {actions.priorities.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
