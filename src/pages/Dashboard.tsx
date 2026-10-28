@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
@@ -25,6 +25,9 @@ const RUTINA_STATUS_ID = 10
 
 type Bucket = 'activas' | 'none' | 'meDeben' | 'revision' | 'largoPlazo' | 'todo'
 type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
+
+// Urgente + Muy importante, then Importante, then everything else.
+const priorityGroup = (id: number) => (id <= 2 ? 0 : id === 3 ? 1 : 2)
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -427,7 +430,8 @@ export default function Dashboard() {
       )}
 
       <div className="space-y-2">
-        {filtered.map((t) => {
+        {filtered.map((t, idx) => {
+          const startsNewGroup = idx > 0 && priorityGroup(t.priority_id) !== priorityGroup(filtered[idx - 1].priority_id)
           const person = personById(t.responsible_id)
           const indirectPerson = personById(t.indirect_id)
           const hasContact = Boolean(person?.email || person?.phone)
@@ -438,8 +442,9 @@ export default function Dashboard() {
           const dimText = urgent ? 'text-gray-700' : 'text-gray-400'
 
           return (
+            <Fragment key={t.id}>
+            {startsNewGroup && <hr className="border-0 border-t-[3px] border-gray-900 rounded-full my-3" />}
             <div
-              key={t.id}
               onClick={() => {
                 if (isExpanded) navigate(`/task/${t.id}`)
                 else setExpandedTaskId(t.id)
@@ -556,6 +561,7 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+            </Fragment>
           )
         })}
       </div>
