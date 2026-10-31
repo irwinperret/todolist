@@ -33,3 +33,21 @@ export async function deleteOrderFiles(project: string, orderNo: string, files: 
   if (res.status === 503) throw new Error('Dropbox todavía no está configurado en Vercel.')
   throw new Error(`No se pudieron borrar los archivos de Dropbox (${res.status}).`)
 }
+
+// Asks the server to email the order PDF and its support to the active recipient.
+export async function sendOrderEmail(project: string, orderNo: string): Promise<{ to: string; attachments: number }> {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('Sesión expirada. Vuelve a entrar.')
+  const res = await fetch(`/api/send-order-email?project=${encodeURIComponent(project)}&order=${encodeURIComponent(orderNo)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const body = (await res.json().catch(() => ({}))) as { to?: string; attachments?: number; error?: string; detail?: string }
+  if (res.ok) return { to: body.to ?? '', attachments: body.attachments ?? 0 }
+  if (body.error === 'not_configured') throw new Error('El correo todavía no está configurado en Vercel (SMTP_USER y SMTP_PASS).')
+  if (body.error === 'no_recipient') throw new Error('No hay destinatario activo en Listas.')
+  if (body.error === 'order_pdf_missing') throw new Error('Falta el PDF de la orden en Dropbox.')
+  if (body.error === 'send_failed') throw new Error(`El correo rechazó el envío${body.detail ? `: ${body.detail}` : ''}`)
+  throw new Error(`No se pudo enviar el email (${res.status}).`)
+}

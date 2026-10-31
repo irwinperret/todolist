@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import InlinePicker from './InlinePicker'
 import { loadActiveRecipient, type PaymentRecipient } from './PaymentRecipients'
-import { MAX_PDF_BYTES, deleteOrderFiles, uploadOrderPdf } from '../lib/dropbox'
+import { MAX_PDF_BYTES, deleteOrderFiles, sendOrderEmail, uploadOrderPdf } from '../lib/dropbox'
 import { useFeedback } from '../lib/FeedbackContext'
 import { extractInvoiceInfo, readPdfText, type InvoiceInfo, type KnownContractor } from '../lib/invoiceReader'
 import {
@@ -252,6 +252,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
 
   const missing = !contractorName ? 'el contratista' : !code ? 'el contrato o presupuesto' : !concept.trim() ? 'el concepto' : !num(amount) ? 'el monto solicitado' : ''
 
+  const [sendEmail, setSendEmail] = useState(true)
   const save = async () => {
     if (missing) { setMessage({ ok: false, text: `Falta ${missing}.` }); return }
     if (support && support.size > MAX_PDF_BYTES) { setMessage({ ok: false, text: 'El PDF pesa más de 4 MB. Comprímelo e inténtalo de nuevo.' }); return }
@@ -319,6 +320,18 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       ok = false
       await supabase.from('payment_orders').update({ order_pdf_path: 'pending' }).eq('project', project).eq('order_no', orderNo)
       text += ` Pero el PDF de la orden no se pudo guardar: ${e instanceof Error ? e.message : 'error'} Puedes regenerarlo desde Historial.`
+    }
+    if (sendEmail && ok) {
+      try {
+        const r = await sendOrderEmail(project, orderNo)
+        await supabase.from('payment_orders').update({ emailed_at: new Date().toISOString() }).eq('project', project).eq('order_no', orderNo)
+        text += ` Email enviado a ${r.to}.`
+      } catch (e) {
+        ok = false
+        text += ` Pero el email no se envió: ${e instanceof Error ? e.message : 'error'} Puedes enviarlo desde Historial.`
+      }
+    } else if (sendEmail && !ok) {
+      text += ' El email no se envió porque falta algún archivo; reenvíalo desde Historial cuando esté completo.'
     }
     setMessage({ ok, text })
     setConcept(''); setAmount(''); setAdvance('0'); setRetentions('0'); setComments(''); setSupport(null); setInvoiceNote(null)
@@ -462,6 +475,10 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       </div>
 
       {message && <p className={`text-sm ${message.ok ? 'text-green-700' : 'text-red-600'}`}>{message.text}</p>}
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
+        Enviar el email al guardar
+      </label>
       <button onClick={save} disabled={saving} className="w-full py-3 rounded-lg bg-gray-900 text-white font-medium disabled:opacity-40">
         {saving ? 'Guardando…' : 'Guardar orden'}
       </button>
@@ -469,7 +486,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
         Destinatario del email: {recipient === undefined ? '…' : recipient ? <b>{recipient.name} ({recipient.email})</b> : <b className="text-red-600">ninguno activo</b>}. Se cambia en Listas.
       </p>
       <p className="text-xs text-gray-400">
-        La orden, su PDF y el soporte se guardan en la app y en Dropbox. El envío del email se conecta en la siguiente etapa.
+        La orden, su PDF y el soporte se guardan en la app y en Dropbox, y se envían por email al destinatario activo.
       </p>
     </div>
   )
@@ -542,6 +559,19 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
       setNote(e instanceof Error ? e.message : 'No se pudo generar el PDF.')
     }
   }
+  const email = async (h: PaymentOrder) => {
+    const ok = await confirm(`¿Enviar por email la orden ${h.order_no} con sus PDFs al destinatario activo?${h.emailed_at ? ' Ya fue enviada antes.' : ''}`, { confirmLabel: 'Enviar' })
+    if (!ok) return
+    setNote('Enviando email…')
+    try {
+      const r = await sendOrderEmail(project, h.order_no)
+      await supabase.from('payment_orders').update({ emailed_at: new Date().toISOString() }).eq('id', h.id)
+      setNote(`Email de la orden ${h.order_no} enviado a ${r.to}.`)
+      await onChanged()
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'No se pudo enviar.')
+    }
+  }
   const regenerate = async (h: PaymentOrder) => {
     setNote('Guardando PDF de la orden…')
     try {
@@ -575,6 +605,9 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
             <span className="text-gray-500 shrink-0">{h.order_date ?? ''}</span>
           </div>
           <button onClick={() => remove(h)} className="float-right text-xs text-red-500 ml-2">Borrar</button>
+          {h.order_pdf_path && h.order_pdf_path !== 'pending' && (
+            <button onClick={() => email(h)} className="float-right text-xs text-emerald-700 ml-2">{h.emailed_at ? 'Reenviar email' : 'Enviar email'}</button>
+          )}
           <button onClick={() => view(h)} className="float-right text-xs text-blue-600 ml-2">Ver PDF</button>
           <div className="text-gray-600">{h.contract_code} · {h.type}</div>
           <div className="text-gray-800 mt-0.5">{h.concept}</div>
