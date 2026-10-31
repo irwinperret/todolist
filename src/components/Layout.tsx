@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import PaymentsModal from './PaymentsModal'
 import { useAuth } from '../lib/AuthContext'
 import { useFab } from '../lib/FabContext'
 import OfflineBadge from './OfflineBadge'
@@ -17,6 +19,7 @@ const navItems = [
 
 export default function Layout() {
   const { signOut } = useAuth()
+  const [paymentsOpen, setPaymentsOpen] = useState(false)
   const navigate = useNavigate()
   const { fab } = useFab()
   const { notifyError } = useFeedback()
@@ -26,15 +29,24 @@ export default function Layout() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <Link to="/" className="font-bold text-blue-900 text-lg">TO DO LIST</Link>
-        <button
-          onClick={async () => {
-            await signOut()
-          }}
-          className="text-sm text-gray-500"
-        >
-          Salir
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setPaymentsOpen(true)}
+            className="text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1"
+          >
+            💸 Pagos
+          </button>
+          <button
+            onClick={async () => {
+              await signOut()
+            }}
+            className="text-sm text-gray-500"
+          >
+            Salir
+          </button>
+        </div>
       </header>
+      {paymentsOpen && <PaymentsModal onClose={() => setPaymentsOpen(false)} />}
 
       <OfflineBadge />
 
