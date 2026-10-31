@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import InlinePicker from './InlinePicker'
 import { loadActiveRecipient, type PaymentRecipient } from './PaymentRecipients'
@@ -275,9 +275,12 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
 
   const [sendEmail, setSendEmail] = useState(true)
   const [syncExcel, setSyncExcel] = useState(true)
+  const savingRef = useRef(false)
   const save = async () => {
+    if (savingRef.current) return // a second tap while the first save is still running
     if (missing) { setMessage({ ok: false, text: `Falta ${missing}.` }); return }
     if (support && support.size > MAX_PDF_BYTES) { setMessage({ ok: false, text: 'El PDF pesa más de 4 MB. Comprímelo e inténtalo de nuevo.' }); return }
+    savingRef.current = true
     setSaving(true)
     setMessage(null)
     const usd = currency === 'Dólares' ? num(amount) : num(rate) ? num(amount) / num(rate) : null
@@ -352,8 +355,9 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       pct_paid: calc.pct_paid,
     }
     const { error } = await supabase.from('payment_orders').insert(row)
-    setSaving(false)
     if (error) {
+      setSaving(false)
+      savingRef.current = false
       setMessage({ ok: false, text: `No se pudo guardar: ${error.message}` })
       return
     }
@@ -404,6 +408,8 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
     setMessage({ ok, text })
     setConcept(''); setAmount(''); setAdvance('0'); setRetentions('0'); setComments(''); setSupport(null); setInvoiceNote(null)
     await onSaved()
+    setSaving(false)
+    savingRef.current = false
   }
 
   return (
