@@ -38,7 +38,7 @@ function money(n: number | null | undefined, currency: string | null): string {
   return v < 0 ? `-${prefix}${abs}` : `${prefix}${abs}`
 }
 
-async function loadSignature(): Promise<Uint8Array> {
+export async function loadSignature(): Promise<Uint8Array> {
   const { data, error } = await supabase.from('app_assets').select('data').eq('name', 'firma_png_base64').single()
   if (error || !data) throw new Error('No pude cargar la firma para la orden.')
   const bin = atob((data as { data: string }).data)
@@ -46,6 +46,11 @@ async function loadSignature(): Promise<Uint8Array> {
 }
 
 export async function buildOrderPdf(o: PaymentOrder): Promise<Uint8Array> {
+  if (o.project === 'VT') return (await import('./orderPdfVt')).buildVtOrderPdf(o)
+  return buildHhPdf(o)
+}
+
+async function buildHhPdf(o: PaymentOrder): Promise<Uint8Array> {
   const pdf = await PDFDocument.create()
   const page = pdf.addPage([595.28, 841.89])
   const regular = await pdf.embedFont(StandardFonts.Helvetica)

@@ -21,7 +21,22 @@ async function isSignedIn(request: Request): Promise<boolean> {
 }
 
 const ROOT = process.env.DROPBOX_PAGOS_ROOT || '/pering/ijp/mar azul - todo/mar azul. personal/obra/1. Pagos'
-const PROJECT_FOLDER: Record<string, string> = { HH: 'Pagos BH' }
+const pad4 = (o: string) => (/^\d+$/.test(o) ? o.padStart(4, '0') : o)
+// Where each project keeps its orders in Dropbox, and how its files are named.
+const PROJECTS: Record<string, { dir: string; folder: (o: string) => string; order: (o: string) => string; support: (o: string) => string }> = {
+  HH: {
+    dir: `${ROOT}/Pagos BH`,
+    folder: (o) => o,
+    order: (o) => `HH Orden de Pago ${o}.pdf`,
+    support: (o) => `Soporte Orden ${o}.pdf`,
+  },
+  VT: {
+    dir: process.env.DROPBOX_VT_DIR || '/PERING/0. Proyectos Pipeline/3. WRJ Vermont TODO/1. WRJ Vermont Personal/2. CM WRJ/2.3 Payments WRJ',
+    folder: (o) => `VT-${pad4(o)}`,
+    order: (o) => `Orden de Pago VT ${pad4(o)}.pdf`,
+    support: (o) => `Soporte Orden VT ${pad4(o)}.pdf`,
+  },
+}
 
 async function accessToken(): Promise<string | null> {
   const key = process.env.DROPBOX_APP_KEY
@@ -55,14 +70,14 @@ export async function POST(request: Request) {
   const project = params.get('project') ?? ''
   const order = params.get('order') ?? ''
   const kinds = (params.get('files') ?? '').split(',').filter((k) => k === 'support' || k === 'order')
-  const folder = PROJECT_FOLDER[project]
-  if (!folder || !/^[0-9A-Za-z-]{1,20}$/.test(order) || kinds.length === 0) return json({ error: 'bad request' }, 400)
+  const cfg = PROJECTS[project]
+  if (!cfg || !/^[0-9A-Za-z-]{1,20}$/.test(order) || kinds.length === 0) return json({ error: 'bad request' }, 400)
 
   const token = await accessToken()
   if (!token) return json({ error: 'not_configured' }, 503)
 
-  const dir = `${ROOT}/${folder}/${order}`
-  const names = kinds.map((k) => (k === 'support' ? `Soporte Orden ${order}.pdf` : `${project} Orden de Pago ${order}.pdf`))
+  const dir = `${cfg.dir}/${cfg.folder(order)}`
+  const names = kinds.map((k) => (k === 'support' ? cfg.support(order) : cfg.order(order)))
 
   for (const name of names) {
     const res = await dbx(token, 'files/delete_v2', { path: `${dir}/${name}` })

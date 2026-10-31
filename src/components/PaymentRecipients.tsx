@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useFeedback } from '../lib/FeedbackContext'
 
-export type PaymentRecipient = { id: string; name: string; email: string; is_active: boolean }
+export type PaymentRecipient = { id: string; name: string; email: string; is_active: boolean; cc_vt?: boolean }
 
 export async function loadActiveRecipient(): Promise<PaymentRecipient | null> {
   const { data } = await supabase.from('payment_recipients').select('*').eq('is_active', true).limit(1)
@@ -48,6 +48,12 @@ export default function PaymentRecipients() {
     reload()
   }
 
+  const toggleCc = async (r: PaymentRecipient) => {
+    const { error } = await supabase.from('payment_recipients').update({ cc_vt: !r.cc_vt }).eq('id', r.id)
+    if (error) return notifyError(error.message)
+    reload()
+  }
+
   const saveEdit = async () => {
     if (!editId || !editName.trim() || !validEmail(editEmail)) return notifyError('Escribe un nombre y un email válido.')
     const { error } = await supabase.from('payment_recipients').update({ name: editName.trim(), email: editEmail.trim() }).eq('id', editId)
@@ -67,7 +73,7 @@ export default function PaymentRecipients() {
   return (
     <div className="px-4 pb-4 space-y-3">
       <p className="text-xs text-gray-500">
-        La orden de pago se envía al destinatario marcado como activo. Toca el círculo para cambiarlo.
+        La orden de pago se envía al destinatario marcado como activo. Toca el círculo para cambiarlo. Las personas marcadas con "Copia WRJ" reciben copia solo de las órdenes de Vermont (WRJ); desmárcalo para dejar de copiarlas.
       </p>
       <div className="space-y-1">
         {list.map((r) => (
@@ -93,6 +99,11 @@ export default function PaymentRecipients() {
                   </span>
                 </button>
                 <div className="flex gap-2 shrink-0">
+                  {!r.is_active && (
+                    <button onClick={() => toggleCc(r)} className={`text-xs ${r.cc_vt ? 'text-emerald-700 font-medium' : 'text-gray-400'}`}>
+                      {r.cc_vt ? '✓ Copia WRJ' : 'Copia WRJ'}
+                    </button>
+                  )}
                   <button onClick={() => { setEditId(r.id); setEditName(r.name); setEditEmail(r.email) }} className="text-xs text-blue-600">Editar</button>
                   <button onClick={() => remove(r)} className="text-xs text-red-500">Borrar</button>
                 </div>

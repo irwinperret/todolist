@@ -13,7 +13,22 @@ const json = (body: unknown, status = 200) =>
   })
 
 const ROOT = process.env.DROPBOX_PAGOS_ROOT || '/pering/ijp/mar azul - todo/mar azul. personal/obra/1. Pagos'
-const PROJECT_FOLDER: Record<string, string> = { HH: 'Pagos BH' }
+const pad4 = (o: string) => (/^\d+$/.test(o) ? o.padStart(4, '0') : o)
+// Where each project keeps its orders in Dropbox, and how its files are named.
+const PROJECTS: Record<string, { dir: string; folder: (o: string) => string; order: (o: string) => string; support: (o: string) => string }> = {
+  HH: {
+    dir: `${ROOT}/Pagos BH`,
+    folder: (o) => o,
+    order: (o) => `HH Orden de Pago ${o}.pdf`,
+    support: (o) => `Soporte Orden ${o}.pdf`,
+  },
+  VT: {
+    dir: process.env.DROPBOX_VT_DIR || '/PERING/0. Proyectos Pipeline/3. WRJ Vermont TODO/1. WRJ Vermont Personal/2. CM WRJ/2.3 Payments WRJ',
+    folder: (o) => `VT-${pad4(o)}`,
+    order: (o) => `Orden de Pago VT ${pad4(o)}.pdf`,
+    support: (o) => `Soporte Orden VT ${pad4(o)}.pdf`,
+  },
+}
 
 const headerJson = (o: unknown) =>
   JSON.stringify(o).replace(/[\u007f-￿]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
@@ -67,25 +82,31 @@ export async function POST(request: Request) {
   const params = new URL(request.url).searchParams
   const project = params.get('project') ?? ''
   const order = params.get('order') ?? ''
-  const folder = PROJECT_FOLDER[project]
-  if (!folder || !/^[0-9A-Za-z-]{1,20}$/.test(order)) return json({ error: 'bad request' }, 400)
+  const cfg = PROJECTS[project]
+  if (!cfg || !/^[0-9A-Za-z-]{1,20}$/.test(order)) return json({ error: 'bad request' }, 400)
 
   const recips = await rest<{ name: string; email: string }[]>(request, 'payment_recipients?is_active=eq.true&select=name,email&limit=1')
   const to = recips?.[0]
   if (!to) return json({ error: 'no_recipient' }, 409)
+  // Only Vermont orders copy the people marked "copia en WRJ" in Listas.
+  let cc = ''
+  if (project === 'VT') {
+    const ccs = await rest<{ name: string; email: string }[]>(request, 'payment_recipients?cc_vt=eq.true&is_active=eq.false&select=name,email')
+    cc = (ccs ?? []).map((c) => `${c.name} <${c.email}>`).join(', ')
+  }
   const orders = await rest<{ comments: string | null }[]>(
     request, `payment_orders?project=eq.${encodeURIComponent(project)}&order_no=eq.${encodeURIComponent(order)}&select=comments&limit=1`)
   const comments = orders?.[0]?.comments?.trim() ?? ''
 
   const token = await dropboxToken()
   if (!token) return json({ error: 'dropbox_not_configured' }, 503)
-  const dir = `${ROOT}/${folder}/${order}`
-  const orderPdf = await download(token, `${dir}/${project} Orden de Pago ${order}.pdf`)
-  const support = await download(token, `${dir}/Soporte Orden ${order}.pdf`)
+  const dir = `${cfg.dir}/${cfg.folder(order)}`
+  const orderPdf = await download(token, `${dir}/${cfg.order(order)}`)
+  const support = await download(token, `${dir}/${cfg.support(order)}`)
   if (!orderPdf) return json({ error: 'order_pdf_missing' }, 409)
 
-  const attachments = [{ filename: `${project} Orden de Pago ${order}.pdf`, content: orderPdf }]
-  if (support) attachments.push({ filename: `Soporte Orden ${order}.pdf`, content: support })
+  const attachments = [{ filename: cfg.order(order), content: orderPdf }]
+  if (support) attachments.push({ filename: cfg.support(order), content: support })
 
   const first = to.name.trim().split(/\s+/)[0] || ''
   const lines = [`Buenas tardes ${first},`.replace(' ,', ','), '', 'Por favor, ayúdame a tramitar el siguiente pago.']
@@ -104,7 +125,8 @@ export async function POST(request: Request) {
     await transport.sendMail({
       from: `Irwin Perret <${user}>`,
       to: `${to.name} <${to.email}>`,
-      subject: `Orden de Pago ${order}`,
+      subject: project === 'VT' ? `Orden de Pago VT ${pad4(order)}` : `Orden de Pago ${order}`,
+      ...(cc ? { cc } : {}),
       text,
       html: `<div style="font-family:Arial,sans-serif;font-size:14px">${esc(text).replace(/\n/g, '<br>')}</div>`,
       attachments,
@@ -113,5 +135,5 @@ export async function POST(request: Request) {
     console.error('smtp error', e instanceof Error ? e.message : e)
     return json({ error: 'send_failed', detail: e instanceof Error ? e.message.slice(0, 200) : 'error' }, 502)
   }
-  return json({ sent: true, to: to.email, attachments: attachments.length })
+  return json({ sent: true, to: to.email, cc, attachments: attachments.length })
 }

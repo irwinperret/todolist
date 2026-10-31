@@ -6,7 +6,7 @@ import { MAX_PDF_BYTES, deleteOrderFiles, sendOrderEmail, uploadOrderPdf } from 
 import { useFeedback } from '../lib/FeedbackContext'
 import { extractInvoiceInfo, readPdfText, type InvoiceInfo, type KnownContractor } from '../lib/invoiceReader'
 import {
-  CURRENCIES, PAYMENT_TYPES, PROJECTS, TAX_TYPES, computeOrder, nextOrderNumber, parsePagosWorkbook,
+  CURRENCIES, PAYMENT_TYPES, PROJECTS, TAX_TYPES, computeOrder, computeVtOrder, nextOrderNumber, parsePagosWorkbook,
   type PaymentOrder,
 } from '../lib/payments'
 
@@ -93,7 +93,7 @@ export default function PaymentsModal({ onClose }: { onClose: () => void }) {
         <div className="p-4 overflow-y-auto">
           {loadError && <p className="text-red-600 text-sm mb-2">{loadError}</p>}
           {history === null && !loadError && <p className="text-gray-500 text-sm py-6 text-center">Cargando historial…</p>}
-          {history !== null && tab === 'new' && <NewOrder project={project} history={history} onSaved={reload} />}
+          {history !== null && tab === 'new' && <NewOrder key={project} project={project} history={history} onSaved={reload} />}
           {history !== null && tab === 'history' && <History history={history} project={project} onChanged={reload} />}
           {history !== null && tab === 'import' && <ImportExcel project={project} existing={history.length} onDone={reload} />}
         </div>
@@ -117,6 +117,9 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
   const [advance, setAdvance] = useState('0')
   const [taxType, setTaxType] = useState('N/A')
   const [retentions, setRetentions] = useState('0')
+  const [extra, setExtra] = useState('0')
+  const [catN1, setCatN1] = useState('')
+  const [catN2, setCatN2] = useState('')
   const [rate, setRate] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -134,6 +137,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
     loadActiveRecipient().then(setRecipient)
   }, [])
 
+  const isVt = project === 'VT'
   const isNewContractor = contractor === '__new__'
   const isNewContract = contractCode === '__new__'
   const contractorName = isNewContractor ? newContractor.trim() : contractor
@@ -220,6 +224,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
     if (last) {
       setDiscipline(last.discipline ?? '')
       setCurrency(last.currency ?? 'Dólares')
+      if (isVt) { setCatN1(last.category_n1 ?? ''); setCatN2(last.category_n2 ?? '') }
       setPhone(last.phone ?? '')
       setEmail(last.email ?? '')
       setAccount(last.account ?? '')
@@ -233,12 +238,28 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       setContractAmount(last.contract_amount !== null ? String(last.contract_amount) : '')
       setCurrency(last.currency ?? currency)
       setTaxType(last.tax_type && TAX_TYPES.includes(last.tax_type) ? last.tax_type : 'N/A')
+      if (isVt) {
+        setExtra(String(last.extra_amount ?? 0))
+        setCatN1(last.category_n1 ?? '')
+        setCatN2(last.category_n2 ?? '')
+      }
     }
   }
 
   const calc = useMemo(
     () =>
-      computeOrder(history, {
+      isVt
+        ? (() => {
+            const v = computeVtOrder(history, {
+              contract_code: code,
+              contract_amount: num(contractAmount),
+              extra_amount: num(extra),
+              amount_requested: num(amount),
+              retentions: num(retentions),
+            })
+            return { ...v, tax_amount: 0, tax_accum: 0 }
+          })()
+        : { ...computeOrder(history, {
         contract_code: code,
         contract_amount: num(contractAmount),
         type,
@@ -246,8 +267,8 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
         advance_amort: num(advance),
         tax_type: taxType,
         retentions: num(retentions),
-      }),
-    [history, code, contractAmount, type, amount, advance, taxType, retentions]
+      }), quote_date: null as string | null },
+    [history, code, contractAmount, type, amount, advance, taxType, retentions, isVt, extra]
   )
 
   const missing = !contractorName ? 'el contratista' : !code ? 'el contrato o presupuesto' : !concept.trim() ? 'el concepto' : !num(amount) ? 'el monto solicitado' : ''
@@ -259,7 +280,43 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
     setSaving(true)
     setMessage(null)
     const usd = currency === 'Dólares' ? num(amount) : num(rate) ? num(amount) / num(rate) : null
-    const row: PaymentOrder = {
+    const row: PaymentOrder = isVt ? {
+      project,
+      order_no: orderNo,
+      order_date: today(),
+      currency: 'Dólares',
+      contractor: contractorName,
+      discipline: null,
+      contract_code: code,
+      contract_date: null,
+      type: null,
+      concept: concept.trim(),
+      contract_amount: num(contractAmount),
+      extra_amount: num(extra),
+      amount_requested: num(amount),
+      balance_before: calc.balance_before,
+      advance_amort: null,
+      tax_type: null,
+      tax_amount: null,
+      tax_accum: null,
+      retentions: num(retentions),
+      retentions_accum: calc.retentions_accum,
+      net_to_pay: calc.net_to_pay,
+      paid_after: calc.paid_after,
+      remaining: calc.remaining,
+      peticion: null,
+      status: 'Solicitado',
+      exchange_rate: null,
+      amount_usd: num(amount),
+      advance_date: calc.quote_date ?? today(),
+      phone: phone.trim() || null,
+      email: email.trim() || null,
+      account: account.trim() || null,
+      comments: comments.trim() || null,
+      pct_paid: calc.pct_paid,
+      category_n1: catN1.trim() || null,
+      category_n2: catN2.trim() || null,
+    } : {
       project,
       order_no: orderNo,
       order_date: today(),
@@ -385,15 +442,30 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
           <InlinePicker
             value={contractCode}
             placeholder="Selecciona el contrato"
-            options={contracts.map((c) => ({ value: c.contract_code as string, label: `${c.contract_code}  ·  ${c.discipline ?? ''}` }))}
+            options={contracts.map((c) => ({ value: c.contract_code as string, label: `${c.contract_code}  ·  ${(isVt ? c.category_n2 : c.discipline) ?? ''}` }))}
             extra={{ value: '__new__', label: '+ Nuevo contrato o presupuesto…' }}
             onChange={pickContract}
           />
-          {isNewContract && <input className={`${input} mt-2`} placeholder="Código (ej. CON-PLO-FER-03)" value={newContract} onChange={(e) => setNewContract(e.target.value)} />}
+          {isNewContract && <input className={`${input} mt-2`} placeholder={isVt ? 'Código (ej. EV-03)' : 'Código (ej. CON-PLO-FER-03)'} value={newContract} onChange={(e) => setNewContract(e.target.value)} />}
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      {isVt && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={label}>Categoría contable (N1)</label>
+            <input className={input} list="vt-cat1" value={catN1} onChange={(e) => setCatN1(e.target.value)} />
+            <datalist id="vt-cat1">{[...new Set(history.map((h) => h.category_n1).filter(Boolean))].map((c) => <option key={c as string} value={c as string} />)}</datalist>
+          </div>
+          <div>
+            <label className={label}>Categoría proforma (N2)</label>
+            <input className={input} list="vt-cat2" value={catN2} onChange={(e) => setCatN2(e.target.value)} />
+            <datalist id="vt-cat2">{[...new Set(history.filter((h) => !catN1 || h.category_n1 === catN1).map((h) => h.category_n2).filter(Boolean))].map((c) => <option key={c as string} value={c as string} />)}</datalist>
+          </div>
+        </div>
+      )}
+
+      {!isVt && <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={label}>Disciplina</label>
           <input className={input} value={discipline} onChange={(e) => setDiscipline(e.target.value)} />
@@ -410,7 +482,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
           <label className={label}>Moneda</label>
           <InlinePicker value={currency} placeholder="Moneda" options={CURRENCIES.map((t) => ({ value: t, label: t }))} onChange={setCurrency} />
         </div>
-      </div>
+      </div>}
 
       <div>
         <label className={label}>Concepto del pago</label>
@@ -426,19 +498,28 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
           <label className={label}>Monto solicitado</label>
           <input inputMode="decimal" className={input} value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
-        <div>
-          <label className={label}>Anticipo a amortizar</label>
-          <input inputMode="decimal" className={input} value={advance} onChange={(e) => setAdvance(e.target.value)} />
-        </div>
-        <div>
-          <label className={label}>IVA o VAT</label>
-          <InlinePicker value={taxType} placeholder="Impuesto" options={TAX_TYPES.map((t) => ({ value: t, label: t === 'IVA' ? 'IVA (12%)' : t === 'VAT' ? 'VAT (6%)' : 'N/A' }))} onChange={setTaxType} />
-        </div>
+        {isVt ? (
+          <div>
+            <label className={label}>Monto extra del contrato (órdenes de cambio, acumulado)</label>
+            <input inputMode="decimal" className={input} value={extra} onChange={(e) => setExtra(e.target.value)} />
+          </div>
+        ) : (
+          <>
+            <div>
+              <label className={label}>Anticipo a amortizar</label>
+              <input inputMode="decimal" className={input} value={advance} onChange={(e) => setAdvance(e.target.value)} />
+            </div>
+            <div>
+              <label className={label}>IVA o VAT</label>
+              <InlinePicker value={taxType} placeholder="Impuesto" options={TAX_TYPES.map((t) => ({ value: t, label: t === 'IVA' ? 'IVA (12%)' : t === 'VAT' ? 'VAT (6%)' : 'N/A' }))} onChange={setTaxType} />
+            </div>
+          </>
+        )}
         <div>
           <label className={label}>Retenciones</label>
           <input inputMode="decimal" className={input} value={retentions} onChange={(e) => setRetentions(e.target.value)} />
         </div>
-        {currency !== 'Dólares' && (
+        {!isVt && currency !== 'Dólares' && (
           <div>
             <label className={label}>Valor dólar ({currency} por 1 USD)</label>
             <input inputMode="decimal" className={input} value={rate} onChange={(e) => setRate(e.target.value)} placeholder="ej. 1.79" />
@@ -448,10 +529,10 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
 
       <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm space-y-1">
         <Row k="Saldo antes de pago" v={money(calc.balance_before)} />
-        <Row k="IVA / VAT" v={money(calc.tax_amount)} />
+        {!isVt && <Row k="IVA / VAT" v={money(calc.tax_amount)} />}
         <Row k="Monto neto a pagar" v={money(calc.net_to_pay)} strong />
         <Row k="Total pagado después de este pago" v={money(calc.paid_after)} />
-        <Row k="Restante del contrato (sin IVA)" v={money(calc.remaining)} />
+        <Row k={isVt ? 'Restante del contrato (con extras)' : 'Restante del contrato (sin IVA)'} v={money(calc.remaining)} />
         <Row k="% del contrato pagado" v={`${(calc.pct_paid * 100).toFixed(1)}%`} />
       </div>
 
@@ -609,7 +690,7 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
             <button onClick={() => email(h)} className="float-right text-xs text-emerald-700 ml-2">{h.emailed_at ? 'Reenviar email' : 'Enviar email'}</button>
           )}
           <button onClick={() => view(h)} className="float-right text-xs text-blue-600 ml-2">Ver PDF</button>
-          <div className="text-gray-600">{h.contract_code} · {h.type}</div>
+          <div className="text-gray-600">{h.contract_code} · {h.type ?? h.category_n2 ?? ''}</div>
           <div className="text-gray-800 mt-0.5">{h.concept}</div>
           <div className="text-gray-900 font-medium mt-1">{money(h.net_to_pay)} {h.currency}</div>
           {h.order_pdf_path === 'pending' && (
@@ -665,7 +746,7 @@ function ImportExcel({ project, existing, onDone }: { project: string; existing:
   return (
     <div className="space-y-3 text-sm">
       <p className="text-gray-600">
-        Elige tu archivo Pagos_Harbour_House.xlsm. Se lee en tu navegador, solo se toma la hoja PagosBH y se guardan las órdenes en tu base de datos.
+        Elige tu archivo de pagos (.xlsm). Se lee en tu navegador, solo se toma la hoja {project === 'VT' ? 'Pagos' : 'PagosBH'} y se guardan las órdenes en tu base de datos.
         Si vuelves a importar, las órdenes con el mismo número se actualizan, no se duplican.
       </p>
       <p className="text-gray-500">Órdenes guardadas actualmente para este proyecto: <b>{existing}</b></p>

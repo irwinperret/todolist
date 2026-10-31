@@ -37,9 +37,16 @@ export type PaymentOrder = {
   support_path?: string | null
   order_pdf_path?: string | null
   emailed_at?: string | null
+  // Only used by the Vermont (VT) project.
+  category_n1?: string | null
+  category_n2?: string | null
+  extra_amount?: number | null
 }
 
-export const PROJECTS = [{ value: 'HH', label: 'Harbour House (HH)' }]
+export const PROJECTS = [
+  { value: 'HH', label: 'Harbour House (HH)' },
+  { value: 'VT', label: 'Green Heights Vermont (VT)' },
+]
 export const CURRENCIES = ['Dólares', 'Florines', 'Euros']
 export const PAYMENT_TYPES = ['ANTICIPO', 'VAL. PARCIAL', 'VAL. CIERRE', 'VAL. ÚNICA', 'VAL. FINAL', 'COMPRA', 'PRESTAMO']
 export const TAX_TYPES = ['N/A', 'IVA', 'VAT']
@@ -87,6 +94,30 @@ export function computeOrder(history: PaymentOrder[], i: OrderInputs) {
   return { balance_before, tax_amount, tax_accum, retentions_accum, net_to_pay, paid_after, remaining, pct_paid }
 }
 
+export type VtInputs = {
+  contract_code: string
+  contract_amount: number
+  extra_amount: number
+  amount_requested: number
+  retentions: number
+}
+
+// Vermont (WRJ) sheet math: no taxes, USD only. Balance before = net paid so far on
+// the contract; net = requested - retentions; paid after = balance + net;
+// remaining = contract + change orders - paid after.
+export function computeVtOrder(history: PaymentOrder[], i: VtInputs) {
+  const prior = history.filter((h) => h.contract_code === i.contract_code)
+  const sum = (f: (h: PaymentOrder) => number | null) => prior.reduce((a, h) => a + (f(h) ?? 0), 0)
+  const balance_before = round2(sum((h) => h.net_to_pay))
+  const net_to_pay = round2(i.amount_requested - i.retentions)
+  const retentions_accum = round2(sum((h) => h.retentions) + i.retentions)
+  const paid_after = round2(balance_before + net_to_pay)
+  const remaining = paid_after === 0 ? 0 : round2(i.contract_amount + i.extra_amount - paid_after)
+  const pct_paid = i.contract_amount ? paid_after / i.contract_amount : 0
+  const firstDate = prior.map((h) => h.order_date).filter((d): d is string => !!d).sort()[0] ?? null
+  return { balance_before, net_to_pay, retentions_accum, paid_after, remaining, pct_paid, quote_date: firstDate }
+}
+
 // ---------- Import of the history from the Excel workbook ----------
 
 const COLS: Record<string, keyof PaymentOrder> = {
@@ -96,8 +127,14 @@ const COLS: Record<string, keyof PaymentOrder> = {
   T: 'net_to_pay', U: 'paid_after', V: 'remaining', W: 'peticion', X: 'status', Y: 'exchange_rate',
   Z: 'amount_usd', AC: 'advance_date', AD: 'phone', AE: 'email', AF: 'account', AG: 'comments', AH: 'pct_paid',
 }
+const VT_COLS: Record<string, keyof PaymentOrder> = {
+  B: 'order_no', C: 'order_date', E: 'contractor', F: 'discipline', G: 'category_n1', H: 'category_n2',
+  I: 'contract_code', J: 'concept', K: 'contract_amount', L: 'extra_amount', M: 'amount_requested',
+  N: 'balance_before', P: 'retentions', Q: 'retentions_accum', R: 'net_to_pay', S: 'paid_after', T: 'remaining',
+  U: 'amount_usd', W: 'advance_date', X: 'phone', Y: 'email', Z: 'account', AA: 'comments', AB: 'pct_paid',
+}
 const NUMERIC = new Set<keyof PaymentOrder>([
-  'contract_amount', 'amount_requested', 'balance_before', 'advance_amort', 'tax_amount', 'tax_accum', 'retentions',
+  'extra_amount', 'contract_amount', 'amount_requested', 'balance_before', 'advance_amort', 'tax_amount', 'tax_accum', 'retentions',
   'retentions_accum', 'net_to_pay', 'paid_after', 'remaining', 'exchange_rate', 'amount_usd', 'pct_paid',
 ])
 const DATES = new Set<keyof PaymentOrder>(['order_date', 'contract_date', 'advance_date'])
@@ -119,9 +156,12 @@ export function parsePagosWorkbook(buffer: ArrayBuffer, project: string): Paymen
   const text = (name: string) => (files[name] ? strFromU8(files[name]) : '')
 
   const wb = text('xl/workbook.xml')
-  const sheetTag = [...wb.matchAll(/<sheet\b[^>]*>/g)].map((m) => m[0]).find((t) => /name="PagosBH"/.test(t))
+  const vt = project === 'VT'
+  const sheetName = vt ? 'Pagos' : 'PagosBH'
+  const cols = vt ? VT_COLS : COLS
+  const sheetTag = [...wb.matchAll(/<sheet\b[^>]*>/g)].map((m) => m[0]).find((t) => t.includes(`name="${sheetName}"`))
   const rid = sheetTag?.match(/r:id="([^"]+)"/)?.[1]
-  if (!rid) throw new Error('No encontré la hoja "PagosBH" en el archivo.')
+  if (!rid) throw new Error(`No encontré la hoja "${sheetName}" en el archivo.`)
   const rels = text('xl/_rels/workbook.xml.rels')
   const relTag = [...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => m[0]).find((t) => t.includes(`Id="${rid}"`))
   const target = relTag?.match(/Target="([^"]+)"/)?.[1]
@@ -145,9 +185,10 @@ export function parsePagosWorkbook(buffer: ArrayBuffer, project: string): Paymen
       else raw[col] = Number.isNaN(Number(v)) ? v : Number(v)
     }
     if (raw.B === undefined || raw.B === '') continue
+    if (vt && (String(raw.B) === '0' || raw.E === undefined || raw.E === '')) continue // blank / placeholder rows
 
     const o: Record<string, unknown> = { project }
-    for (const [col, field] of Object.entries(COLS)) {
+    for (const [col, field] of Object.entries(cols)) {
       const v = raw[col]
       if (v === undefined || v === '' || (typeof v === 'string' && v.startsWith('#'))) { o[field] = null; continue }
       if (field === 'order_no') o[field] = String(v).replace(/\.0$/, '')
@@ -155,6 +196,7 @@ export function parsePagosWorkbook(buffer: ArrayBuffer, project: string): Paymen
       else if (NUMERIC.has(field)) o[field] = typeof v === 'number' ? v : null
       else o[field] = String(v).trim() === '0' && (field === 'phone' || field === 'email') ? null : String(v)
     }
+    if (vt) { o.currency = 'Dólares' }
     orders.push(o as PaymentOrder)
   }
   return orders
