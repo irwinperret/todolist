@@ -4,6 +4,7 @@ import InlinePicker from './InlinePicker'
 import { loadActiveRecipient, type PaymentRecipient } from './PaymentRecipients'
 import { MAX_PDF_BYTES, deleteOrderFiles, uploadOrderPdf } from '../lib/dropbox'
 import { useFeedback } from '../lib/FeedbackContext'
+import { extractInvoiceInfo, readPdfText, type InvoiceInfo, type KnownContractor } from '../lib/invoiceReader'
 import {
   CURRENCIES, PAYMENT_TYPES, PROJECTS, TAX_TYPES, computeOrder, nextOrderNumber, parsePagosWorkbook,
   type PaymentOrder,
@@ -122,7 +123,9 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
   const [account, setAccount] = useState('')
   const [comments, setComments] = useState('')
   const [support, setSupport] = useState<File | null>(null)
-  const [fileKey, setFileKey] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const [reading, setReading] = useState(false)
+  const [invoiceNote, setInvoiceNote] = useState<{ ok: boolean; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [recipient, setRecipient] = useState<PaymentRecipient | null | undefined>(undefined)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
@@ -155,6 +158,60 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
 
   const orderNo = nextOrderNumber(history)
 
+  const known = useMemo<KnownContractor[]>(() => {
+    const map = new Map<string, KnownContractor>()
+    for (const h of recent) {
+      if (!h.contractor) continue
+      const k = map.get(h.contractor)
+      if (k) k.count++
+      else map.set(h.contractor, { name: h.contractor, count: 1, email: h.email })
+    }
+    return [...map.values()]
+  }, [recent])
+
+  // Fills only what is still empty from what was read in the invoice; nothing is saved.
+  const applyInvoice = (info: InvoiceInfo) => {
+    const got: string[] = []
+    if (info.contractor && !contractor) {
+      pickContractor(info.contractor)
+      got.push(`contratista ${info.contractor}`)
+      const lastContract = recent.find((h) => h.contractor === info.contractor && h.contract_code)?.contract_code
+      if (lastContract && !contractCode) {
+        pickContract(lastContract, info.contractor)
+        got.push(`contrato ${lastContract} (el más reciente de ese contratista, verifícalo)`)
+      }
+    }
+    if (info.amount && !num(amount)) {
+      setAmount(String(info.amount))
+      got.push(`monto ${money(info.amount)}`)
+      if (info.currency) { setCurrency(info.currency); got.push(`moneda ${info.currency}`) }
+    }
+    if (info.reference && !concept.trim()) { setConcept(info.reference); got.push(`concepto "${info.reference}"`) }
+    setInvoiceNote(
+      got.length
+        ? { ok: true, text: `Leído de la factura: ${got.join(', ')}. Revisa todo antes de guardar.` }
+        : { ok: false, text: 'No encontré datos en esta factura (puede ser un escaneo o una foto). Llena el formulario a mano.' }
+    )
+  }
+
+  const handleFile = async (f: File | null | undefined) => {
+    if (!f) return
+    if (!(f.type === 'application/pdf' || /\.pdf$/i.test(f.name))) { setMessage({ ok: false, text: 'Solo se aceptan archivos PDF.' }); return }
+    if (f.size > MAX_PDF_BYTES) { setMessage({ ok: false, text: 'El PDF pesa más de 4 MB. Comprímelo e inténtalo de nuevo.' }); return }
+    setSupport(f)
+    setMessage(null)
+    setInvoiceNote(null)
+    setReading(true)
+    try {
+      const text = await readPdfText(f)
+      if (text.replace(/\s/g, '').length < 20) setInvoiceNote({ ok: false, text: 'Este PDF no tiene texto (parece un escaneo). Llena el formulario a mano.' })
+      else applyInvoice(extractInvoiceInfo(text, known))
+    } catch {
+      setInvoiceNote({ ok: false, text: 'No pude leer el contenido del PDF. Llena el formulario a mano.' })
+    }
+    setReading(false)
+  }
+
   const pickContractor = (v: string) => {
     setContractor(v)
     setContractCode('')
@@ -168,9 +225,9 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       setAccount(last.account ?? '')
     }
   }
-  const pickContract = (v: string) => {
+  const pickContract = (v: string, who: string = contractor) => {
     setContractCode(v)
-    const last = contracts.find((c) => c.contract_code === v)
+    const last = recent.find((c) => c.contractor === who && c.contract_code === v)
     if (last) {
       setDiscipline(last.discipline ?? '')
       setContractAmount(last.contract_amount !== null ? String(last.contract_amount) : '')
@@ -255,12 +312,34 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       }
     }
     setMessage({ ok, text })
-    setConcept(''); setAmount(''); setAdvance('0'); setRetentions('0'); setComments(''); setSupport(null); setFileKey((k) => k + 1)
+    setConcept(''); setAmount(''); setAdvance('0'); setRetentions('0'); setComments(''); setSupport(null); setInvoiceNote(null)
     await onSaved()
   }
 
   return (
     <div className="space-y-3">
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files?.[0]) }}
+        className={`rounded-xl border-2 border-dashed p-4 text-center text-sm ${dragging ? 'border-emerald-600 bg-emerald-50' : 'border-gray-300 bg-gray-50'}`}
+      >
+        {support ? (
+          <div className="space-y-1">
+            <p className="font-medium text-gray-900 break-all">📄 {support.name}</p>
+            {reading && <p className="text-gray-500">Leyendo la factura…</p>}
+            <button type="button" onClick={() => { setSupport(null); setInvoiceNote(null) }} className="text-xs text-red-500">Quitar</button>
+          </div>
+        ) : (
+          <label className="block cursor-pointer text-gray-600">
+            <span className="font-medium text-gray-900">Arrastra aquí la factura (PDF)</span>
+            <span className="block text-xs mt-0.5">o toca para elegirla. Se guardará en la carpeta de la orden en Dropbox y se intentará llenar el formulario con sus datos.</span>
+            <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = '' }} />
+          </label>
+        )}
+        {invoiceNote && <p className={`mt-2 text-xs ${invoiceNote.ok ? 'text-emerald-800' : 'text-amber-700'}`}>{invoiceNote.text}</p>}
+      </div>
+
       <div className="flex items-center justify-between">
         <span className="text-sm text-gray-500">Orden de pago No.</span>
         <span className="text-lg font-bold text-gray-900">{orderNo}</span>
@@ -367,10 +446,6 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
           <label className={label}>Email beneficiario</label>
           <input className={input} value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
-      </div>
-      <div>
-        <label className={label}>Factura o soporte (PDF, se guarda en la carpeta de la orden en Dropbox)</label>
-        <input key={fileKey} type="file" accept="application/pdf,.pdf" className="text-sm" onChange={(e) => setSupport(e.target.files?.[0] ?? null)} />
       </div>
       <div>
         <label className={label}>Comentarios adicionales (van en el cuerpo del email a Ana)</label>
