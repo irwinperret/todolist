@@ -311,6 +311,15 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
         text += ` Pero el soporte no se pudo subir: ${e instanceof Error ? e.message : 'error'} Puedes subirlo después desde Historial.`
       }
     }
+    try {
+      const path = await saveOrderPdf(row)
+      await supabase.from('payment_orders').update({ order_pdf_path: path }).eq('project', project).eq('order_no', orderNo)
+      text += ' Orden en PDF guardada en Dropbox.'
+    } catch (e) {
+      ok = false
+      await supabase.from('payment_orders').update({ order_pdf_path: 'pending' }).eq('project', project).eq('order_no', orderNo)
+      text += ` Pero el PDF de la orden no se pudo guardar: ${e instanceof Error ? e.message : 'error'} Puedes regenerarlo desde Historial.`
+    }
     setMessage({ ok, text })
     setConcept(''); setAmount(''); setAdvance('0'); setRetentions('0'); setComments(''); setSupport(null); setInvoiceNote(null)
     await onSaved()
@@ -460,10 +469,18 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
         Destinatario del email: {recipient === undefined ? '…' : recipient ? <b>{recipient.name} ({recipient.email})</b> : <b className="text-red-600">ninguno activo</b>}. Se cambia en Listas.
       </p>
       <p className="text-xs text-gray-400">
-        Por ahora la orden y el soporte se guardan en la app y en Dropbox. El PDF de la orden y el email se conectan en la siguiente etapa.
+        La orden, su PDF y el soporte se guardan en la app y en Dropbox. El envío del email se conecta en la siguiente etapa.
       </p>
     </div>
   )
+}
+
+// Builds the order PDF in the template format and files it in the order's Dropbox folder.
+async function saveOrderPdf(o: PaymentOrder): Promise<string> {
+  const { buildOrderPdf } = await import('../lib/orderPdf')
+  const bytes = await buildOrderPdf(o)
+  const file = new File([bytes as BlobPart], `${o.project} Orden de Pago ${o.order_no}.pdf`, { type: 'application/pdf' })
+  return uploadOrderPdf(file, o.project, o.order_no, 'order')
 }
 
 function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
@@ -482,7 +499,7 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
   const remove = async (h: PaymentOrder) => {
     const files: ('support' | 'order')[] = []
     if (h.support_path && h.support_path !== 'pending') files.push('support')
-    if (h.order_pdf_path) files.push('order')
+    if (h.order_pdf_path && h.order_pdf_path !== 'pending') files.push('order')
     const dropboxLine = files.length
       ? 'También se borrarán sus archivos de Dropbox (quedan en "Archivos eliminados" de Dropbox por un tiempo).'
       : 'No tiene archivos guardados por la app, así que no se toca nada en Dropbox.'
@@ -514,6 +531,28 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
       setNote(e instanceof Error ? e.message : 'No se pudo subir.')
     }
   }
+  const view = async (h: PaymentOrder) => {
+    setNote('Generando PDF…')
+    try {
+      const { buildOrderPdf } = await import('../lib/orderPdf')
+      const bytes = await buildOrderPdf(h)
+      window.open(URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' })), '_blank')
+      setNote('')
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'No se pudo generar el PDF.')
+    }
+  }
+  const regenerate = async (h: PaymentOrder) => {
+    setNote('Guardando PDF de la orden…')
+    try {
+      const path = await saveOrderPdf(h)
+      await supabase.from('payment_orders').update({ order_pdf_path: path }).eq('id', h.id)
+      setNote(`PDF de la orden ${h.order_no} guardado en Dropbox.`)
+      await onChanged()
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'No se pudo guardar.')
+    }
+  }
   const norm = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
   const rows = useMemo(() => {
     const all = [...history].reverse()
@@ -536,9 +575,15 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
             <span className="text-gray-500 shrink-0">{h.order_date ?? ''}</span>
           </div>
           <button onClick={() => remove(h)} className="float-right text-xs text-red-500 ml-2">Borrar</button>
+          <button onClick={() => view(h)} className="float-right text-xs text-blue-600 ml-2">Ver PDF</button>
           <div className="text-gray-600">{h.contract_code} · {h.type}</div>
           <div className="text-gray-800 mt-0.5">{h.concept}</div>
           <div className="text-gray-900 font-medium mt-1">{money(h.net_to_pay)} {h.currency}</div>
+          {h.order_pdf_path === 'pending' && (
+            <button onClick={() => regenerate(h)} className="block mt-2 text-xs text-amber-700 underline">
+              Falta el PDF de la orden en Dropbox: regenerar y guardar
+            </button>
+          )}
           {h.support_path === 'pending' && (
             <label className="block mt-2 text-xs text-amber-700">
               Falta subir el soporte a Dropbox:{' '}
