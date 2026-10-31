@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import InlinePicker from './InlinePicker'
 import { loadActiveRecipient, type PaymentRecipient } from './PaymentRecipients'
-import { MAX_PDF_BYTES, uploadOrderPdf } from '../lib/dropbox'
+import { MAX_PDF_BYTES, deleteOrderFiles, uploadOrderPdf } from '../lib/dropbox'
+import { useFeedback } from '../lib/FeedbackContext'
 import {
   CURRENCIES, PAYMENT_TYPES, PROJECTS, TAX_TYPES, computeOrder, nextOrderNumber, parsePagosWorkbook,
   type PaymentOrder,
@@ -402,6 +403,30 @@ function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
 function History({ history, project, onChanged }: { history: PaymentOrder[]; project: string; onChanged: () => Promise<void> }) {
   const [q, setQ] = useState('')
   const [note, setNote] = useState('')
+  const { confirm } = useFeedback()
+  const remove = async (h: PaymentOrder) => {
+    const files: ('support' | 'order')[] = []
+    if (h.support_path && h.support_path !== 'pending') files.push('support')
+    if (h.order_pdf_path) files.push('order')
+    const dropboxLine = files.length
+      ? 'También se borrarán sus archivos de Dropbox (quedan en "Archivos eliminados" de Dropbox por un tiempo).'
+      : 'No tiene archivos guardados por la app, así que no se toca nada en Dropbox.'
+    const ok = await confirm(
+      `¿Borrar la orden ${h.order_no} (${h.contractor ?? ''}, ${money(h.net_to_pay)} ${h.currency ?? ''})? Dejará de contar en los saldos y acumulados de su contrato. ${dropboxLine}`,
+      { danger: true, confirmLabel: 'Borrar' }
+    )
+    if (!ok || !h.id) return
+    setNote('Borrando…')
+    try {
+      if (files.length) await deleteOrderFiles(project, h.order_no, files)
+      const { error } = await supabase.from('payment_orders').delete().eq('id', h.id)
+      if (error) throw new Error(error.message)
+      setNote(`Orden ${h.order_no} borrada.`)
+      await onChanged()
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'No se pudo borrar.')
+    }
+  }
   const retry = async (orderNo: string, file: File | undefined) => {
     if (!file) return
     setNote('Subiendo…')
@@ -435,6 +460,7 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
             <span className="font-bold text-gray-900">#{h.order_no} · {h.contractor}</span>
             <span className="text-gray-500 shrink-0">{h.order_date ?? ''}</span>
           </div>
+          <button onClick={() => remove(h)} className="float-right text-xs text-red-500 ml-2">Borrar</button>
           <div className="text-gray-600">{h.contract_code} · {h.type}</div>
           <div className="text-gray-800 mt-0.5">{h.concept}</div>
           <div className="text-gray-900 font-medium mt-1">{money(h.net_to_pay)} {h.currency}</div>

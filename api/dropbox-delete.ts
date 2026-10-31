@@ -1,0 +1,87 @@
+// Removes the files this app saved for one payment order from Dropbox (the
+// supplier's invoice and/or the generated order PDF) and then the order's folder
+// if it ended up empty. Only those two exact file names are ever touched, never
+// anything else in the folder. Dropbox keeps deleted files in "Deleted files", so
+// they can still be restored from there for a while. Requires a valid Supabase
+// session.
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
+  })
+
+async function isSignedIn(request: Request): Promise<boolean> {
+  const url = process.env.VITE_SUPABASE_URL
+  const anon = process.env.VITE_SUPABASE_ANON_KEY
+  const auth = request.headers.get('authorization')
+  if (!url || !anon || !auth) return false
+  const res = await fetch(`${url}/auth/v1/user`, { headers: { apikey: anon, Authorization: auth } })
+  return res.ok
+}
+
+const ROOT = process.env.DROPBOX_PAGOS_ROOT || '/pering/ijp/mar azul - todo/mar azul. personal/obra/1. Pagos'
+const PROJECT_FOLDER: Record<string, string> = { HH: 'Pagos BH' }
+
+async function accessToken(): Promise<string | null> {
+  const key = process.env.DROPBOX_APP_KEY
+  const secret = process.env.DROPBOX_APP_SECRET
+  const refresh = process.env.DROPBOX_REFRESH_TOKEN
+  if (!key || !secret || !refresh) return null
+  const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Basic ' + Buffer.from(`${key}:${secret}`).toString('base64'),
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refresh }),
+  })
+  if (!res.ok) return null
+  return ((await res.json()) as { access_token?: string }).access_token ?? null
+}
+
+async function dbx(token: string, endpoint: string, body: unknown) {
+  return fetch(`https://api.dropboxapi.com/2/${endpoint}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function POST(request: Request) {
+  if (!(await isSignedIn(request))) return json({ error: 'unauthorized' }, 401)
+
+  const params = new URL(request.url).searchParams
+  const project = params.get('project') ?? ''
+  const order = params.get('order') ?? ''
+  const kinds = (params.get('files') ?? '').split(',').filter((k) => k === 'support' || k === 'order')
+  const folder = PROJECT_FOLDER[project]
+  if (!folder || !/^[0-9A-Za-z-]{1,20}$/.test(order) || kinds.length === 0) return json({ error: 'bad request' }, 400)
+
+  const token = await accessToken()
+  if (!token) return json({ error: 'not_configured' }, 503)
+
+  const dir = `${ROOT}/${folder}/${order}`
+  const names = kinds.map((k) => (k === 'support' ? `Soporte Orden ${order}.pdf` : `${project} Orden de Pago ${order}.pdf`))
+
+  for (const name of names) {
+    const res = await dbx(token, 'files/delete_v2', { path: `${dir}/${name}` })
+    if (!res.ok) {
+      const text = await res.text()
+      // A file that is already gone counts as deleted.
+      if (!(res.status === 409 && text.includes('not_found'))) {
+        console.error('dropbox delete error', res.status, text.slice(0, 300))
+        return json({ error: 'delete_failed', status: res.status }, 502)
+      }
+    }
+  }
+
+  // Remove the order's folder only if nothing else is left in it.
+  let folderRemoved = false
+  const list = await dbx(token, 'files/list_folder', { path: dir, recursive: false })
+  if (list.ok) {
+    const { entries } = (await list.json()) as { entries: unknown[] }
+    if (entries.length === 0) folderRemoved = (await dbx(token, 'files/delete_v2', { path: dir })).ok
+  }
+  return json({ deleted: names, folderRemoved })
+}
