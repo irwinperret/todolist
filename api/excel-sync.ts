@@ -1,8 +1,7 @@
 // Adds an order created in the app (or, with action=remove, takes it out again) to the Excel workbook that holds the payment
 // history in Dropbox (one row in the payments sheet and, for Harbour House, the
-// order's tab). While EXCEL_SYNC_LIVE is not "1" it only writes to a test copy next
-// to the real workbook, so the real one is never touched during testing. In live
-// mode the real file is replaced only if nobody changed it in the meantime.
+// order's tab). It writes to the real workbook, replacing it only if nobody changed it in the
+// meantime. With EXCEL_SYNC_LIVE=0 it writes to a test copy next to it instead.
 // Requires a valid Supabase session and the Dropbox env vars of the other functions.
 import { applyOrder, removeOrder, type SyncOrder } from './_excel.js'
 
@@ -77,7 +76,7 @@ export async function POST(request: Request) {
   const order = removing ? null : await loadOrder(request, project, orderNo)
   if (!removing && !order) return json({ error: 'order_not_found' }, 404)
 
-  const live = process.env.EXCEL_SYNC_LIVE === '1'
+  const live = process.env.EXCEL_SYNC_LIVE !== '0' // set EXCEL_SYNC_LIVE=0 in Vercel to go back to the test copies
   const realPath = `${cfg.dir}/${cfg.name}.xlsm`
   const testPath = `${cfg.dir}/${cfg.name} (prueba app).xlsm`
 
