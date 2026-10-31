@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useFeedback } from '../lib/FeedbackContext'
+import { PROJECTS } from '../lib/payments'
 
-export type PaymentRecipient = { id: string; name: string; email: string; is_active: boolean; cc_vt?: boolean }
+export type PaymentRecipient = { id: string; name: string; email: string; is_active: boolean; is_cc?: boolean; project: string }
 
-export async function loadActiveRecipient(): Promise<PaymentRecipient | null> {
-  const { data } = await supabase.from('payment_recipients').select('*').eq('is_active', true).limit(1)
+export async function loadActiveRecipient(project: string): Promise<PaymentRecipient | null> {
+  const { data } = await supabase.from('payment_recipients').select('*').eq('project', project).eq('is_active', true).limit(1)
   return ((data as PaymentRecipient[]) ?? [])[0] ?? null
 }
 
-// "Destinatarios de órdenes de pago": who receives the payment order email.
-// Exactly one is active at a time; that one is used when an order is sent.
+// "Destinatarios de órdenes de pago", one list per project. In each project exactly
+// one person is active (receives the order email) and others can be marked "copia"
+// to receive a copy.
 export default function PaymentRecipients() {
   const { notifyError, confirm } = useFeedback()
   const [list, setList] = useState<PaymentRecipient[]>([])
+  const [project, setProject] = useState(PROJECTS[0].value)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
@@ -31,25 +34,26 @@ export default function PaymentRecipients() {
   }, [reload])
 
   const validEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim())
+  const mine = list.filter((r) => r.project === project)
 
   const add = async () => {
     if (!name.trim() || !validEmail(email)) return notifyError('Escribe un nombre y un email válido.')
-    const { error } = await supabase.from('payment_recipients').insert({ name: name.trim(), email: email.trim(), is_active: list.length === 0 })
+    const { error } = await supabase.from('payment_recipients').insert({ name: name.trim(), email: email.trim(), is_active: mine.length === 0, project })
     if (error) return notifyError(error.message)
     setName(''); setEmail('')
     reload()
   }
 
-  const activate = async (id: string) => {
-    const off = await supabase.from('payment_recipients').update({ is_active: false }).neq('id', id)
+  const activate = async (r: PaymentRecipient) => {
+    const off = await supabase.from('payment_recipients').update({ is_active: false }).eq('project', r.project).neq('id', r.id)
     if (off.error) return notifyError(off.error.message)
-    const on = await supabase.from('payment_recipients').update({ is_active: true }).eq('id', id)
+    const on = await supabase.from('payment_recipients').update({ is_active: true, is_cc: false }).eq('id', r.id)
     if (on.error) return notifyError(on.error.message)
     reload()
   }
 
   const toggleCc = async (r: PaymentRecipient) => {
-    const { error } = await supabase.from('payment_recipients').update({ cc_vt: !r.cc_vt }).eq('id', r.id)
+    const { error } = await supabase.from('payment_recipients').update({ is_cc: !r.is_cc }).eq('id', r.id)
     if (error) return notifyError(error.message)
     reload()
   }
@@ -72,11 +76,23 @@ export default function PaymentRecipients() {
 
   return (
     <div className="px-4 pb-4 space-y-3">
+      <div className="flex gap-2 text-sm">
+        {PROJECTS.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => { setProject(p.value); setEditId(null) }}
+            className={`px-3 py-1.5 rounded-full border ${project === p.value ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-300'}`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
       <p className="text-xs text-gray-500">
-        La orden de pago se envía al destinatario marcado como activo. Toca el círculo para cambiarlo. Las personas marcadas con "Copia WRJ" reciben copia solo de las órdenes de Vermont (WRJ); desmárcalo para dejar de copiarlas.
+        Cada proyecto tiene su propia lista. La orden de pago se envía a quien esté activo (toca el círculo para cambiarlo). Quien tenga "Copia" marcado recibe una copia de las órdenes de este proyecto; tócalo de nuevo para quitarla.
       </p>
       <div className="space-y-1">
-        {list.map((r) => (
+        {mine.length === 0 && <p className="text-sm text-gray-400 py-2">Sin destinatarios en este proyecto.</p>}
+        {mine.map((r) => (
           <div key={r.id} className="py-2 border-b border-gray-100">
             {editId === r.id ? (
               <div className="space-y-2">
@@ -89,7 +105,7 @@ export default function PaymentRecipients() {
               </div>
             ) : (
               <div className="flex items-center justify-between gap-2">
-                <button onClick={() => activate(r.id)} className="flex items-center gap-2 min-w-0 text-left" aria-label={`Usar a ${r.name} como destinatario`}>
+                <button onClick={() => activate(r)} className="flex items-center gap-2 min-w-0 text-left" aria-label={`Usar a ${r.name} como destinatario`}>
                   <span className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${r.is_active ? 'border-emerald-600' : 'border-gray-300'}`}>
                     {r.is_active && <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />}
                   </span>
@@ -100,8 +116,8 @@ export default function PaymentRecipients() {
                 </button>
                 <div className="flex gap-2 shrink-0">
                   {!r.is_active && (
-                    <button onClick={() => toggleCc(r)} className={`text-xs ${r.cc_vt ? 'text-emerald-700 font-medium' : 'text-gray-400'}`}>
-                      {r.cc_vt ? '✓ Copia WRJ' : 'Copia WRJ'}
+                    <button onClick={() => toggleCc(r)} className={`text-xs ${r.is_cc ? 'text-emerald-700 font-medium' : 'text-gray-400'}`}>
+                      {r.is_cc ? '✓ Copia' : 'Copia'}
                     </button>
                   )}
                   <button onClick={() => { setEditId(r.id); setEditName(r.name); setEditEmail(r.email) }} className="text-xs text-blue-600">Editar</button>
@@ -113,7 +129,7 @@ export default function PaymentRecipients() {
         ))}
       </div>
       <div className="space-y-2 border border-gray-100 rounded-lg p-3 bg-gray-50">
-        <p className="text-xs text-gray-500">Nuevo destinatario</p>
+        <p className="text-xs text-gray-500">Nuevo destinatario para {PROJECTS.find((p) => p.value === project)?.label}</p>
         <input type="text" placeholder="Nombre" value={name} onChange={(e) => setName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
         <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
         <button onClick={add} className="w-full bg-gray-900 text-white rounded-lg py-2 text-sm">Agregar destinatario</button>

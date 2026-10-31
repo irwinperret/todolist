@@ -85,15 +85,13 @@ export async function POST(request: Request) {
   const cfg = PROJECTS[project]
   if (!cfg || !/^[0-9A-Za-z-]{1,20}$/.test(order)) return json({ error: 'bad request' }, 400)
 
-  const recips = await rest<{ name: string; email: string }[]>(request, 'payment_recipients?is_active=eq.true&select=name,email&limit=1')
+  const recips = await rest<{ name: string; email: string }[]>(request, `payment_recipients?project=eq.${encodeURIComponent(project)}&is_active=eq.true&select=name,email&limit=1`)
   const to = recips?.[0]
   if (!to) return json({ error: 'no_recipient' }, 409)
-  // Only Vermont orders copy the people marked "copia en WRJ" in Listas.
-  let cc = ''
-  if (project === 'VT') {
-    const ccs = await rest<{ name: string; email: string }[]>(request, 'payment_recipients?cc_vt=eq.true&is_active=eq.false&select=name,email')
-    cc = (ccs ?? []).map((c) => `${c.name} <${c.email}>`).join(', ')
-  }
+  // People marked "con copia" for this project in Listas.
+  const ccs = await rest<{ name: string; email: string }[]>(
+    request, `payment_recipients?project=eq.${encodeURIComponent(project)}&is_cc=eq.true&is_active=eq.false&select=name,email`)
+  const cc = (ccs ?? []).map((c) => `${c.name} <${c.email}>`).join(', ')
   const orders = await rest<{ comments: string | null }[]>(
     request, `payment_orders?project=eq.${encodeURIComponent(project)}&order_no=eq.${encodeURIComponent(order)}&select=comments&limit=1`)
   const comments = orders?.[0]?.comments?.trim() ?? ''

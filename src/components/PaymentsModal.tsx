@@ -134,8 +134,8 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
-    loadActiveRecipient().then(setRecipient)
-  }, [])
+    loadActiveRecipient(project).then(setRecipient)
+  }, [project])
 
   const isVt = project === 'VT'
   const isNewContractor = contractor === '__new__'
