@@ -4,6 +4,7 @@ import { useLookups } from '../lib/useLookups'
 import { useFeedback } from '../lib/FeedbackContext'
 import { assertOk, useUndo } from '../lib/useUndo'
 import type { Project, Person } from '../lib/types'
+import PaymentRecipients from '../components/PaymentRecipients'
 import { PASTEL_PROJECT_COLORS, VIVID_PROJECT_COLORS, projectColor } from '../lib/types'
 
 export default function ManageLists() {
@@ -13,6 +14,7 @@ export default function ManageLists() {
   const [newProject, setNewProject] = useState('')
   const [projectsOpen, setProjectsOpen] = useState(false)
   const [peopleOpen, setPeopleOpen] = useState(false)
+  const [recipientsOpen, setRecipientsOpen] = useState(false)
 
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [editingProjectName, setEditingProjectName] = useState('')
@@ -278,6 +280,18 @@ export default function ManageLists() {
             </div>
           </div>
         )}
+      </section>
+
+      <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setRecipientsOpen((v) => !v)}
+          className="w-full flex items-center justify-between p-4 text-left"
+          aria-expanded={recipientsOpen}
+        >
+          <span className="font-medium text-gray-900">Destinatarios de órdenes de pago</span>
+          <span className="text-xl leading-none text-gray-500">{recipientsOpen ? '−' : '+'}</span>
+        </button>
+        {recipientsOpen && <PaymentRecipients />}
       </section>
     </div>
   )

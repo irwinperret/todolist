@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import InlinePicker from './InlinePicker'
+import { loadActiveRecipient, type PaymentRecipient } from './PaymentRecipients'
 import {
   CURRENCIES, PAYMENT_TYPES, PROJECTS, TAX_TYPES, computeOrder, nextOrderNumber, parsePagosWorkbook,
   type PaymentOrder,
@@ -119,7 +120,12 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
   const [account, setAccount] = useState('')
   const [comments, setComments] = useState('')
   const [saving, setSaving] = useState(false)
+  const [recipient, setRecipient] = useState<PaymentRecipient | null | undefined>(undefined)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    loadActiveRecipient().then(setRecipient)
+  }, [])
 
   const isNewContractor = contractor === '__new__'
   const isNewContract = contractCode === '__new__'
@@ -353,6 +359,9 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       <button onClick={save} disabled={saving} className="w-full py-3 rounded-lg bg-gray-900 text-white font-medium disabled:opacity-40">
         {saving ? 'Guardando…' : 'Guardar orden'}
       </button>
+      <p className="text-xs text-gray-600">
+        Destinatario del email: {recipient === undefined ? '…' : recipient ? <b>{recipient.name} ({recipient.email})</b> : <b className="text-red-600">ninguno activo</b>}. Se cambia en Listas.
+      </p>
       <p className="text-xs text-gray-400">
         Por ahora la orden se guarda en la app. El PDF, la factura en Dropbox y el email a Ana se conectan en la siguiente etapa.
       </p>
