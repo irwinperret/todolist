@@ -52,7 +52,7 @@ export async function sendOrderEmail(project: string, orderNo: string): Promise<
   throw new Error(`No se pudo enviar el email (${res.status}).`)
 }
 
-export type ExcelSyncResult = { mode: 'live' | 'test'; status: 'added' | 'already' | 'removed' | 'absent'; row: number | null; tab?: string }
+export type ExcelSyncResult = { mode: 'live' | 'test'; status: 'added' | 'already' | 'linked' | 'removed' | 'absent'; row: number | null; tab?: string }
 
 // Adds the order to the Excel workbook in Dropbox (a test copy until live mode is on).
 export async function syncOrderToExcel(project: string, orderNo: string, action: 'add' | 'remove' = 'add'): Promise<ExcelSyncResult> {

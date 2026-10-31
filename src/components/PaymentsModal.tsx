@@ -399,7 +399,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       try {
         const r = await syncOrderToExcel(project, orderNo)
         if (r.mode === 'live') await supabase.from('payment_orders').update({ excel_synced_at: new Date().toISOString() }).eq('project', project).eq('order_no', orderNo)
-        text += r.status === 'already' ? ' La orden ya estaba en el Excel.' : r.mode === 'live' ? ' Excel actualizado.' : ' Copia de prueba del Excel actualizada.'
+        text += r.status === 'already' ? ' La orden ya estaba en el Excel.' : r.status === 'linked' ? ' Se agregó el enlace a su carpeta en el Excel.' : r.mode === 'live' ? ' Excel actualizado.' : ' Copia de prueba del Excel actualizada.'
       } catch (e) {
         ok = false
         text += ` Pero el Excel no se actualizó: ${e instanceof Error ? e.message : 'error'} Puedes sincronizarlo desde Historial.`
@@ -673,7 +673,7 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
     try {
       const r = await syncOrderToExcel(project, h.order_no)
       if (r.mode === 'live') await supabase.from('payment_orders').update({ excel_synced_at: new Date().toISOString() }).eq('id', h.id)
-      setNote(r.status === 'already' ? `La orden ${h.order_no} ya estaba en el Excel.` : r.mode === 'live' ? `Orden ${h.order_no} agregada al Excel.` : `Orden ${h.order_no} agregada a la copia de prueba del Excel.`)
+      setNote(r.status === 'already' ? `La orden ${h.order_no} ya estaba en el Excel.` : r.status === 'linked' ? `Se agregó el enlace a la carpeta de la orden ${h.order_no} en el Excel.` : r.mode === 'live' ? `Orden ${h.order_no} agregada al Excel.` : `Orden ${h.order_no} agregada a la copia de prueba del Excel.`)
       await onChanged()
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'No se pudo actualizar el Excel.')

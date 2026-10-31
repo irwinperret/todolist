@@ -238,16 +238,74 @@ function addOrderTab(files: Record<string, Uint8Array>, orderNo: string): string
   return 'added'
 }
 
-export type SyncResult = { bytes: Uint8Array; row: number; status: 'added' | 'already'; tab: 'added' | 'exists' | 'none' }
+// ---- hyperlink from the order number to the order's folder in Dropbox ----
+
+// Same links the macro makes: Harbour House points to "Pagos BH\<order>" next to the
+// workbook; Vermont goes through the V: drive shortcut, as the existing rows do.
+function hyperlinkFor(project: string, orderNo: string): { target: string; display: string } {
+  if (project === 'VT') {
+    const n = /^\d+$/.test(orderNo) ? orderNo.padStart(4, '0') : orderNo
+    return {
+      target: `file:///V:\\2.%20CM%20WRJ\\2.3%20Payments%20WRJ\\VT-${n}`,
+      display: `V:\\2. CM WRJ\\2.3 Payments WRJ\\VT-${n}`,
+    }
+  }
+  return { target: `Pagos%20BH\\${orderNo}`, display: `Pagos BH\\${orderNo}` }
+}
+
+function relsPathOf(sheetFile: string): string {
+  return sheetFile.replace('worksheets/', 'worksheets/_rels/') + '.rels'
+}
+
+// Adds the link on cell B<row>; false when the cell already has one.
+function ensureHyperlink(files: Record<string, Uint8Array>, sheetFile: string, row: number, link: { target: string; display: string }): boolean {
+  let xml = strFromU8(files[sheetFile])
+  if (new RegExp(`<hyperlink ref="B${row}"`).test(xml)) return false
+  const relsFile = relsPathOf(sheetFile)
+  let rels = files[relsFile] ? strFromU8(files[relsFile]) : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+  let max = 0
+  for (const m of rels.matchAll(/Id="rId(\d+)"/g)) max = Math.max(max, Number(m[1]))
+  const rid = `rId${max + 1}`
+  rels = rels.replace('</Relationships>', `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${esc(link.target)}" TargetMode="External"/></Relationships>`)
+  files[relsFile] = strToU8(rels)
+  const el = `<hyperlink ref="B${row}" r:id="${rid}" display="${esc(link.display)}"/>`
+  if (xml.includes('</hyperlinks>')) xml = xml.replace('</hyperlinks>', `${el}</hyperlinks>`)
+  else if (xml.includes('<pageMargins')) xml = xml.replace('<pageMargins', `<hyperlinks>${el}</hyperlinks><pageMargins`)
+  else throw new Error('no_place_for_hyperlink')
+  files[sheetFile] = strToU8(xml)
+  return true
+}
+
+function removeHyperlink(files: Record<string, Uint8Array>, sheetFile: string, row: number): void {
+  let xml = strFromU8(files[sheetFile])
+  const m = xml.match(new RegExp(`<hyperlink ref="B${row}"[^>]*/>`))
+  if (!m) return
+  const rid = m[0].match(/r:id="([^"]+)"/)?.[1]
+  xml = xml.replace(m[0], '')
+  files[sheetFile] = strToU8(xml)
+  const relsFile = relsPathOf(sheetFile)
+  if (rid && files[relsFile]) {
+    const rels = strFromU8(files[relsFile])
+    files[relsFile] = strToU8(rels.replace(new RegExp(`<Relationship Id="${rid}"[^>]*/>`), ''))
+  }
+}
+
+export type SyncResult = { bytes: Uint8Array; row: number; status: 'added' | 'already' | 'linked'; tab: 'added' | 'exists' | 'none' }
 
 export function applyOrder(zip: Uint8Array, o: SyncOrder): SyncResult {
   const files = unzipSync(zip)
   const { path } = sheetPath(files, SHEET_NAME[o.project])
   const xml = strFromU8(files[path])
   const target = findTargetRow(xml, o.order_no)
-  if (target.exists) return { bytes: zip, row: target.row, status: 'already', tab: 'none' }
+  const link = hyperlinkFor(o.project, o.order_no)
+  if (target.exists) {
+    // Row already there: only make sure it has its link to the order folder.
+    if (!ensureHyperlink(files, path, target.row, link)) return { bytes: zip, row: target.row, status: 'already', tab: 'none' }
+    return { bytes: finalize(files), row: target.row, status: 'linked', tab: 'none' }
+  }
 
   files[path] = strToU8(fillRow(xml, o, target.row))
+  ensureHyperlink(files, path, target.row, link)
   let tab: SyncResult['tab'] = 'none'
   if (o.project === 'HH') tab = addOrderTab(files, o.order_no) === 'added' ? 'added' : 'exists'
 
@@ -286,6 +344,8 @@ export function removeOrder(zip: Uint8Array, project: string, orderNo: string): 
   let row: number | null = null
   if (target.exists) {
     row = target.row
+    removeHyperlink(files, path, row)
+    xml = strFromU8(files[path])
     const found = findRow(xml, row)!
     const a = [...found.inner.matchAll(cellRe)].find((m) => m[1] === 'A')
     const open = found.tag.replace(/\s+spans="[^"]*"/, '').replace(/\/>$/, '>')
