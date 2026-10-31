@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import InlinePicker from './InlinePicker'
 import { loadActiveRecipient, type PaymentRecipient } from './PaymentRecipients'
+import { MAX_PDF_BYTES, uploadOrderPdf } from '../lib/dropbox'
 import {
   CURRENCIES, PAYMENT_TYPES, PROJECTS, TAX_TYPES, computeOrder, nextOrderNumber, parsePagosWorkbook,
   type PaymentOrder,
@@ -91,7 +92,7 @@ export default function PaymentsModal({ onClose }: { onClose: () => void }) {
           {loadError && <p className="text-red-600 text-sm mb-2">{loadError}</p>}
           {history === null && !loadError && <p className="text-gray-500 text-sm py-6 text-center">Cargando historial…</p>}
           {history !== null && tab === 'new' && <NewOrder project={project} history={history} onSaved={reload} />}
-          {history !== null && tab === 'history' && <History history={history} />}
+          {history !== null && tab === 'history' && <History history={history} project={project} onChanged={reload} />}
           {history !== null && tab === 'import' && <ImportExcel project={project} existing={history.length} onDone={reload} />}
         </div>
       </div>
@@ -119,6 +120,8 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
   const [email, setEmail] = useState('')
   const [account, setAccount] = useState('')
   const [comments, setComments] = useState('')
+  const [support, setSupport] = useState<File | null>(null)
+  const [fileKey, setFileKey] = useState(0)
   const [saving, setSaving] = useState(false)
   const [recipient, setRecipient] = useState<PaymentRecipient | null | undefined>(undefined)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
@@ -193,6 +196,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
 
   const save = async () => {
     if (missing) { setMessage({ ok: false, text: `Falta ${missing}.` }); return }
+    if (support && support.size > MAX_PDF_BYTES) { setMessage({ ok: false, text: 'El PDF pesa más de 4 MB. Comprímelo e inténtalo de nuevo.' }); return }
     setSaving(true)
     setMessage(null)
     const usd = currency === 'Dólares' ? num(amount) : num(rate) ? num(amount) / num(rate) : null
@@ -236,8 +240,21 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       setMessage({ ok: false, text: `No se pudo guardar: ${error.message}` })
       return
     }
-    setMessage({ ok: true, text: `Orden ${orderNo} guardada.` })
-    setConcept(''); setAmount(''); setAdvance('0'); setRetentions('0'); setComments('')
+    let text = `Orden ${orderNo} guardada.`
+    let ok = true
+    if (support) {
+      try {
+        const path = await uploadOrderPdf(support, project, orderNo, 'support')
+        await supabase.from('payment_orders').update({ support_path: path }).eq('project', project).eq('order_no', orderNo)
+        text += ' Soporte guardado en Dropbox.'
+      } catch (e) {
+        ok = false
+        await supabase.from('payment_orders').update({ support_path: 'pending' }).eq('project', project).eq('order_no', orderNo)
+        text += ` Pero el soporte no se pudo subir: ${e instanceof Error ? e.message : 'error'} Puedes subirlo después desde Historial.`
+      }
+    }
+    setMessage({ ok, text })
+    setConcept(''); setAmount(''); setAdvance('0'); setRetentions('0'); setComments(''); setSupport(null); setFileKey((k) => k + 1)
     await onSaved()
   }
 
@@ -351,6 +368,10 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
         </div>
       </div>
       <div>
+        <label className={label}>Factura o soporte (PDF, se guarda en la carpeta de la orden en Dropbox)</label>
+        <input key={fileKey} type="file" accept="application/pdf,.pdf" className="text-sm" onChange={(e) => setSupport(e.target.files?.[0] ?? null)} />
+      </div>
+      <div>
         <label className={label}>Comentarios adicionales (van en el cuerpo del email a Ana)</label>
         <textarea className={input} rows={2} value={comments} onChange={(e) => setComments(e.target.value)} />
       </div>
@@ -363,7 +384,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
         Destinatario del email: {recipient === undefined ? '…' : recipient ? <b>{recipient.name} ({recipient.email})</b> : <b className="text-red-600">ninguno activo</b>}. Se cambia en Listas.
       </p>
       <p className="text-xs text-gray-400">
-        Por ahora la orden se guarda en la app. El PDF, la factura en Dropbox y el email a Ana se conectan en la siguiente etapa.
+        Por ahora la orden y el soporte se guardan en la app y en Dropbox. El PDF de la orden y el email se conectan en la siguiente etapa.
       </p>
     </div>
   )
@@ -378,8 +399,21 @@ function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
   )
 }
 
-function History({ history }: { history: PaymentOrder[] }) {
+function History({ history, project, onChanged }: { history: PaymentOrder[]; project: string; onChanged: () => Promise<void> }) {
   const [q, setQ] = useState('')
+  const [note, setNote] = useState('')
+  const retry = async (orderNo: string, file: File | undefined) => {
+    if (!file) return
+    setNote('Subiendo…')
+    try {
+      const path = await uploadOrderPdf(file, project, orderNo, 'support')
+      await supabase.from('payment_orders').update({ support_path: path }).eq('project', project).eq('order_no', orderNo)
+      setNote(`Soporte de la orden ${orderNo} guardado en Dropbox.`)
+      await onChanged()
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'No se pudo subir.')
+    }
+  }
   const norm = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
   const rows = useMemo(() => {
     const all = [...history].reverse()
@@ -393,6 +427,7 @@ function History({ history }: { history: PaymentOrder[] }) {
   return (
     <div className="space-y-2">
       <input className={input} placeholder={`Buscar entre ${history.length} órdenes…`} value={q} onChange={(e) => setQ(e.target.value)} />
+      {note && <p className="text-sm text-gray-700">{note}</p>}
       {rows.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">Sin resultados</p>}
       {rows.map((h) => (
         <div key={h.order_no} className="border border-gray-200 rounded-lg p-3 text-sm">
@@ -403,6 +438,12 @@ function History({ history }: { history: PaymentOrder[] }) {
           <div className="text-gray-600">{h.contract_code} · {h.type}</div>
           <div className="text-gray-800 mt-0.5">{h.concept}</div>
           <div className="text-gray-900 font-medium mt-1">{money(h.net_to_pay)} {h.currency}</div>
+          {h.support_path === 'pending' && (
+            <label className="block mt-2 text-xs text-amber-700">
+              Falta subir el soporte a Dropbox:{' '}
+              <input type="file" accept="application/pdf,.pdf" onChange={(e) => retry(h.order_no, e.target.files?.[0])} />
+            </label>
+          )}
         </div>
       ))}
     </div>
