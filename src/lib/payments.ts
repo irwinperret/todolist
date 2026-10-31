@@ -47,7 +47,15 @@ export type PaymentOrder = {
 export const PROJECTS = [
   { value: 'HH', label: 'Harbour House (HH)' },
   { value: 'VT', label: 'Green Heights Vermont (VT)' },
+  { value: 'PGM', label: 'PGM Construction Aruba (PGM)' },
 ]
+// Vermont and PGM share the same sheet layout and math (no taxes, per-contract balance).
+export const isVtLike = (project: string) => project === 'VT' || project === 'PGM'
+// PGM keeps the currency in column D as Afl / USD / Euros.
+export const toExcelCurrency = (c: string | null) => (c === 'Florines' ? 'Afl' : c === 'Euros' ? 'Euros' : 'USD')
+export const fromExcelCurrency = (c: string | null) => (c && c.toLowerCase() === 'afl' ? 'Florines' : c && c.toLowerCase() === 'euros' ? 'Euros' : 'Dólares')
+// Same conversion as the PGM sheet (column AD).
+export const pgmUsd = (net: number, currency: string | null) => (currency === 'Florines' ? net / 1.78 : currency === 'Euros' ? net * 1.2 : net)
 export const CURRENCIES = ['Dólares', 'Florines', 'Euros']
 export const PAYMENT_TYPES = ['ANTICIPO', 'VAL. PARCIAL', 'VAL. CIERRE', 'VAL. ÚNICA', 'VAL. FINAL', 'COMPRA', 'PRESTAMO']
 export const TAX_TYPES = ['N/A', 'IVA', 'VAT']
@@ -134,6 +142,8 @@ const VT_COLS: Record<string, keyof PaymentOrder> = {
   N: 'balance_before', P: 'retentions', Q: 'retentions_accum', R: 'net_to_pay', S: 'paid_after', T: 'remaining',
   U: 'amount_usd', W: 'advance_date', X: 'phone', Y: 'email', Z: 'account', AA: 'comments', AB: 'pct_paid',
 }
+const { U: _u, ...VT_REST } = VT_COLS
+const PGM_COLS: Record<string, keyof PaymentOrder> = { ...VT_REST, AD: 'amount_usd' }
 const NUMERIC = new Set<keyof PaymentOrder>([
   'extra_amount', 'contract_amount', 'amount_requested', 'balance_before', 'advance_amort', 'tax_amount', 'tax_accum', 'retentions',
   'retentions_accum', 'net_to_pay', 'paid_after', 'remaining', 'exchange_rate', 'amount_usd', 'pct_paid',
@@ -157,9 +167,9 @@ export function parsePagosWorkbook(buffer: ArrayBuffer, project: string): Paymen
   const text = (name: string) => (files[name] ? strFromU8(files[name]) : '')
 
   const wb = text('xl/workbook.xml')
-  const vt = project === 'VT'
+  const vt = isVtLike(project)
   const sheetName = vt ? 'Pagos' : 'PagosBH'
-  const cols = vt ? VT_COLS : COLS
+  const cols = project === 'PGM' ? PGM_COLS : vt ? VT_COLS : COLS
   const sheetTag = [...wb.matchAll(/<sheet\b[^>]*>/g)].map((m) => m[0]).find((t) => t.includes(`name="${sheetName}"`))
   const rid = sheetTag?.match(/r:id="([^"]+)"/)?.[1]
   if (!rid) throw new Error(`No encontré la hoja "${sheetName}" en el archivo.`)
@@ -197,7 +207,8 @@ export function parsePagosWorkbook(buffer: ArrayBuffer, project: string): Paymen
       else if (NUMERIC.has(field)) o[field] = typeof v === 'number' ? v : null
       else o[field] = String(v).trim() === '0' && (field === 'phone' || field === 'email') ? null : String(v)
     }
-    if (vt) { o.currency = 'Dólares' }
+    if (project === 'PGM') o.currency = fromExcelCurrency((raw.D as string) ?? null)
+    else if (vt) o.currency = 'Dólares'
     orders.push(o as PaymentOrder)
   }
   return orders

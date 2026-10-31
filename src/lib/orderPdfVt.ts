@@ -123,7 +123,8 @@ export async function buildVtOrderPdf(o: PaymentOrder): Promise<Uint8Array> {
   put('title', X.c, X.e, 'No.', { bold: true, size: 9.5 })
   put('title', X.e, X.end, /^\d+$/.test(o.order_no) ? o.order_no.padStart(4, '0') : o.order_no, { bold: true, size: 9.5 })
 
-  put('project', X.a, X.b, 'Project', { size: small }); put('project', X.b, X.d, 'Green Heights Multifamily', { bold: true, size: 7.2, color: NAVY })
+  const pgm = o.project === 'PGM'
+  put('project', X.a, X.b, 'Project', { size: small }); put('project', X.b, X.d, pgm ? 'PGM Construction - General Aruba' : 'Green Heights Multifamily', { bold: true, size: 7.2, color: NAVY })
   put('project', X.d, X.e, 'Date', { size: small }); put('project', X.e, X.end, shortDate(o.order_date), { size: small })
   put('vendor', X.a, X.b, 'Proveedor:', { size: small }); put('vendor', X.b, X.d, o.contractor ?? '', { bold: true, size: 7.2 })
   put('vendor', X.d, X.e, 'Contact', { size: small }); put('vendor', X.e, X.end, o.phone ?? '', { size: small })
@@ -133,6 +134,7 @@ export async function buildVtOrderPdf(o: PaymentOrder): Promise<Uint8Array> {
   put('balance', X.d, X.e, 'Accounting cat', { size: small }); put('balance', X.e, X.end, o.category_n1 ?? '', { size: 5.8, min: 4.5 })
   put('proforma', X.d, X.e, 'Proforma cat', { size: small }); put('proforma', X.e, X.end, o.category_n2 ?? '', { size: 5.8, min: 4.5 })
 
+  if (pgm) { put('yellow', X.a, X.b, 'Moneda', { size: small }); put('yellow', X.b, X.end, o.currency ?? 'Dólares', { bold: true, size: big }) }
   put('desc', X.a, X.b, 'Description', { size: big }); put('desc', X.b, X.end, o.concept ?? '', { size: big })
   put('amount', X.a, X.b, 'Amount', { size: big }); put('amount', X.b, X.end, usd(o.amount_requested), { size: big })
   put('withheld', X.a, X.b, 'Withheld', { size: big }); put('withheld', X.b, X.end, usd(o.retentions), { size: big })

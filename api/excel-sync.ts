@@ -13,9 +13,11 @@ const json = (body: unknown, status = 200) =>
 
 const ROOT = process.env.DROPBOX_PAGOS_ROOT || '/pering/ijp/mar azul - todo/mar azul. personal/obra/1. Pagos'
 const VT_DIR = process.env.DROPBOX_VT_DIR || '/PERING/0. Proyectos Pipeline/3. WRJ Vermont TODO/1. WRJ Vermont Personal/2. CM WRJ/2.3 Payments WRJ'
+const PGM_DIR = process.env.DROPBOX_PGM_DIR || '/PERING/IJP/0 - PGM CONST GEN'
 const FILES: Record<string, { dir: string; name: string }> = {
   HH: { dir: ROOT, name: 'Pagos Harbour House' },
   VT: { dir: VT_DIR, name: 'Payments WRJ' },
+  PGM: { dir: PGM_DIR, name: 'Pagos PGM' },
 }
 
 const headerJson = (o: unknown) =>

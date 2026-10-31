@@ -46,7 +46,7 @@ export async function loadSignature(): Promise<Uint8Array> {
 }
 
 export async function buildOrderPdf(o: PaymentOrder): Promise<Uint8Array> {
-  if (o.project === 'VT') return (await import('./orderPdfVt')).buildVtOrderPdf(o)
+  if (o.project === 'VT' || o.project === 'PGM') return (await import('./orderPdfVt')).buildVtOrderPdf(o)
   return buildHhPdf(o)
 }
 

@@ -51,7 +51,8 @@ const unesc = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').repla
 export function rowCells(o: SyncOrder, r: number): Record<string, Cell | null> {
   const orderNo = /^\d+$/.test(o.order_no) ? num(Number(o.order_no)) : str(o.order_no)
   const p = r - 1
-  if (o.project === 'VT') {
+  if (o.project === 'VT' || o.project === 'PGM') {
+    const pgm = o.project === 'PGM'
     return {
       B: orderNo, C: excelDate(o.order_date), E: str(o.contractor), G: str(o.category_n1), H: str(o.category_n2),
       I: str(o.contract_code), J: str(o.concept), K: num(o.contract_amount), L: num(o.extra_amount ?? 0), M: num(o.amount_requested),
@@ -67,6 +68,10 @@ export function rowCells(o: SyncOrder, r: number): Record<string, Cell | null> {
       X: str(o.phone), Y: str(o.email), Z: str(o.account), AA: str(o.comments),
       AB: fx(`IFERROR(+S${r}/K${r},"")`),
       AC: fx(`IFERROR(+S${r}/(K${r}+L${r}),"")`),
+      ...(pgm ? {
+        D: str(o.currency === 'Florines' ? 'Afl' : o.currency === 'Euros' ? 'Euros' : 'USD'),
+        AD: fx(`IF(D${r}="afl",R${r}/1.78,IF(D${r}="Euros",R${r}*1.2,IF(D${r}="USD",R${r},"")))`),
+      } : {}),
     }
   }
   return {
@@ -135,7 +140,33 @@ export function findTargetRow(xml: string, orderNo: string): { row: number; exis
   return { row: lastB + 1, exists: false }
 }
 
-export function fillRow(xml: string, o: SyncOrder, r: number): string {
+// A cell we overwrite may be the master of a shared formula that rows below depend on
+// (the PGM sheet comes pre-filled with them). Give those rows their own explicit
+// formulas first so nothing below loses its calculation.
+function detachSharedMasters(xml: string, o: SyncOrder, r: number): string {
+  const row = findRow(xml, r)
+  if (!row) return xml
+  for (const m of row.inner.matchAll(cellRe)) {
+    const col = m[1]
+    if (!cellsFormulaCols(o, r).has(col)) continue
+    const f = m[4]?.match(/<f t="shared" ref="([A-Z]+)(\d+):([A-Z]+)(\d+)" si="(\d+)"/)
+    if (!f) continue
+    const [, , r1, , r2, si] = f
+    if (Number(r2) <= Number(r1)) continue
+    for (let rr = Number(r1) + 1; rr <= Number(r2); rr++) {
+      const fc = rowCells(o, rr)[col]
+      if (!fc || fc.kind !== 'f') continue
+      const re = new RegExp(`(<c r="${col}${rr}"[^>]*>)<f t="shared" si="${si}"\\s*/>`)
+      xml = xml.replace(re, (_x, head: string) => `${head}<f>${esc(fc.v)}</f>`)
+    }
+  }
+  return xml
+}
+const cellsFormulaCols = (o: SyncOrder, r: number) =>
+  new Set(Object.entries(rowCells(o, r)).filter(([, c]) => c && c.kind === 'f').map(([k]) => k))
+
+export function fillRow(xmlIn: string, o: SyncOrder, r: number): string {
+  const xml = detachSharedMasters(xmlIn, o, r)
   const cells = rowCells(o, r)
   const prev = findRow(xml, r - 1)
   const prevStyle = new Map<string, string>()
@@ -161,7 +192,7 @@ export function fillRow(xml: string, o: SyncOrder, r: number): string {
 
 // ---- workbook plumbing ----
 
-const SHEET_NAME: Record<string, string> = { HH: 'PagosBH', VT: 'Pagos' }
+const SHEET_NAME: Record<string, string> = { HH: 'PagosBH', VT: 'Pagos', PGM: 'Pagos' }
 
 function sheetPath(files: Record<string, Uint8Array>, name: string): { wb: string; path: string; index: number } {
   const wb = strFromU8(files['xl/workbook.xml'])
@@ -243,8 +274,10 @@ function addOrderTab(files: Record<string, Uint8Array>, orderNo: string): string
 // Same links the macro makes: Harbour House points to "Pagos BH\<order>" next to the
 // workbook; Vermont goes through the V: drive shortcut, as the existing rows do.
 function hyperlinkFor(project: string, orderNo: string): { target: string; display: string } {
+  const n = /^\d+$/.test(orderNo) ? orderNo.padStart(4, '0') : orderNo
+  // PGM: relative link to the order folder next to the workbook, as its macro makes it.
+  if (project === 'PGM') return { target: `PGM%20${n}`, display: `PGM ${n}` }
   if (project === 'VT') {
-    const n = /^\d+$/.test(orderNo) ? orderNo.padStart(4, '0') : orderNo
     return {
       target: `file:///V:\\2.%20CM%20WRJ\\2.3%20Payments%20WRJ\\VT-${n}`,
       display: `V:\\2. CM WRJ\\2.3 Payments WRJ\\VT-${n}`,

@@ -6,7 +6,7 @@ import { MAX_PDF_BYTES, deleteOrderFiles, sendOrderEmail, syncOrderToExcel, uplo
 import { useFeedback } from '../lib/FeedbackContext'
 import { extractInvoiceInfo, readPdfText, type InvoiceInfo, type KnownContractor } from '../lib/invoiceReader'
 import {
-  CURRENCIES, PAYMENT_TYPES, PROJECTS, TAX_TYPES, computeOrder, computeVtOrder, nextOrderNumber, parsePagosWorkbook,
+  CURRENCIES, PAYMENT_TYPES, PROJECTS, TAX_TYPES, computeOrder, computeVtOrder, isVtLike, nextOrderNumber, parsePagosWorkbook, pgmUsd,
   type PaymentOrder,
 } from '../lib/payments'
 
@@ -137,7 +137,8 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
     loadActiveRecipient(project).then(setRecipient)
   }, [project])
 
-  const isVt = project === 'VT'
+  const isVt = isVtLike(project)
+  const isPgm = project === 'PGM'
   const isNewContractor = contractor === '__new__'
   const isNewContract = contractCode === '__new__'
   const contractorName = isNewContractor ? newContractor.trim() : contractor
@@ -288,7 +289,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       project,
       order_no: orderNo,
       order_date: today(),
-      currency: 'Dólares',
+      currency: isPgm ? currency : 'Dólares',
       contractor: contractorName,
       discipline: null,
       contract_code: code,
@@ -311,7 +312,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       peticion: null,
       status: 'Solicitado',
       exchange_rate: null,
-      amount_usd: num(amount),
+      amount_usd: isPgm ? Math.round(pgmUsd(calc.net_to_pay, currency) * 100) / 100 : num(amount),
       advance_date: calc.quote_date ?? today(),
       phone: phone.trim() || null,
       email: email.trim() || null,
@@ -463,7 +464,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
             extra={{ value: '__new__', label: '+ Nuevo contrato o presupuesto…' }}
             onChange={pickContract}
           />
-          {isNewContract && <input className={`${input} mt-2`} placeholder={isVt ? 'Código (ej. EV-03)' : 'Código (ej. CON-PLO-FER-03)'} value={newContract} onChange={(e) => setNewContract(e.target.value)} />}
+          {isNewContract && <input className={`${input} mt-2`} placeholder={isPgm ? 'Código (ej. SHS-01)' : isVt ? 'Código (ej. EV-03)' : 'Código (ej. CON-PLO-FER-03)'} value={newContract} onChange={(e) => setNewContract(e.target.value)} />}
         </div>
       )}
 
@@ -479,6 +480,13 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
             <input className={input} list="vt-cat2" value={catN2} onChange={(e) => setCatN2(e.target.value)} />
             <datalist id="vt-cat2">{[...new Set(history.filter((h) => !catN1 || h.category_n1 === catN1).map((h) => h.category_n2).filter(Boolean))].map((c) => <option key={c as string} value={c as string} />)}</datalist>
           </div>
+        </div>
+      )}
+
+      {isPgm && (
+        <div>
+          <label className={label}>Moneda</label>
+          <InlinePicker value={currency} placeholder="Moneda" options={CURRENCIES.map((t) => ({ value: t, label: t }))} onChange={setCurrency} />
         </div>
       )}
 
@@ -788,7 +796,7 @@ function ImportExcel({ project, existing, onDone }: { project: string; existing:
   return (
     <div className="space-y-3 text-sm">
       <p className="text-gray-600">
-        Elige tu archivo de pagos (.xlsm). Se lee en tu navegador, solo se toma la hoja {project === 'VT' ? 'Pagos' : 'PagosBH'} y se guardan las órdenes en tu base de datos.
+        Elige tu archivo de pagos (.xlsm). Se lee en tu navegador, solo se toma la hoja {isVtLike(project) ? 'Pagos' : 'PagosBH'} y se guardan las órdenes en tu base de datos.
         Si vuelves a importar, las órdenes con el mismo número se actualizan, no se duplican.
       </p>
       <p className="text-gray-500">Órdenes guardadas actualmente para este proyecto: <b>{existing}</b></p>

@@ -36,6 +36,12 @@ const PROJECTS: Record<string, { dir: string; folder: (o: string) => string; ord
     order: (o) => `Orden de Pago VT ${pad4(o)}.pdf`,
     support: (o) => `Soporte Orden VT ${pad4(o)}.pdf`,
   },
+  PGM: {
+    dir: process.env.DROPBOX_PGM_DIR || '/PERING/IJP/0 - PGM CONST GEN',
+    folder: (o) => `PGM ${pad4(o)}`,
+    order: (o) => `Orden de Pago PGM ${pad4(o)}.pdf`,
+    support: (o) => `Soporte Orden PGM ${pad4(o)}.pdf`,
+  },
 }
 
 async function accessToken(): Promise<string | null> {

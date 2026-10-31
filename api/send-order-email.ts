@@ -28,6 +28,12 @@ const PROJECTS: Record<string, { dir: string; folder: (o: string) => string; ord
     order: (o) => `Orden de Pago VT ${pad4(o)}.pdf`,
     support: (o) => `Soporte Orden VT ${pad4(o)}.pdf`,
   },
+  PGM: {
+    dir: process.env.DROPBOX_PGM_DIR || '/PERING/IJP/0 - PGM CONST GEN',
+    folder: (o) => `PGM ${pad4(o)}`,
+    order: (o) => `Orden de Pago PGM ${pad4(o)}.pdf`,
+    support: (o) => `Soporte Orden PGM ${pad4(o)}.pdf`,
+  },
 }
 
 const headerJson = (o: unknown) =>
@@ -123,7 +129,7 @@ export async function POST(request: Request) {
     await transport.sendMail({
       from: `Irwin Perret <${user}>`,
       to: `${to.name} <${to.email}>`,
-      subject: project === 'VT' ? `Orden de Pago VT ${pad4(order)}` : `Orden de Pago ${order}`,
+      subject: project === 'VT' || project === 'PGM' ? `Orden de Pago ${project} ${pad4(order)}` : `Orden de Pago ${order}`,
       ...(cc ? { cc } : {}),
       text,
       html: `<div style="font-family:Arial,sans-serif;font-size:14px">${esc(text).replace(/\n/g, '<br>')}</div>`,
