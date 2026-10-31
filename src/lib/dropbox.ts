@@ -51,3 +51,23 @@ export async function sendOrderEmail(project: string, orderNo: string): Promise<
   if (body.error === 'send_failed') throw new Error(`El correo rechazó el envío${body.detail ? `: ${body.detail}` : ''}`)
   throw new Error(`No se pudo enviar el email (${res.status}).`)
 }
+
+export type ExcelSyncResult = { mode: 'live' | 'test'; status: 'added' | 'already'; row: number; tab?: string }
+
+// Adds the order to the Excel workbook in Dropbox (a test copy until live mode is on).
+export async function syncOrderToExcel(project: string, orderNo: string): Promise<ExcelSyncResult> {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('Sesión expirada. Vuelve a entrar.')
+  const res = await fetch(`/api/excel-sync?project=${encodeURIComponent(project)}&order=${encodeURIComponent(orderNo)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const body = (await res.json().catch(() => ({}))) as Partial<ExcelSyncResult> & { error?: string }
+  if (res.ok) return body as ExcelSyncResult
+  if (body.error === 'not_configured') throw new Error('Dropbox todavía no está configurado en Vercel.')
+  if (body.error === 'excel_not_found') throw new Error('No encontré el Excel en Dropbox.')
+  if (body.error === 'excel_unreadable') throw new Error('No pude leer el Excel para agregar la orden.')
+  if (body.error === 'conflict') throw new Error('El Excel cambió mientras tanto (¿lo tienes abierto?). Ciérralo y reintenta desde Historial.')
+  throw new Error(`No se pudo actualizar el Excel (${res.status}).`)
+}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import InlinePicker from './InlinePicker'
 import { loadActiveRecipient, type PaymentRecipient } from './PaymentRecipients'
-import { MAX_PDF_BYTES, deleteOrderFiles, sendOrderEmail, uploadOrderPdf } from '../lib/dropbox'
+import { MAX_PDF_BYTES, deleteOrderFiles, sendOrderEmail, syncOrderToExcel, uploadOrderPdf } from '../lib/dropbox'
 import { useFeedback } from '../lib/FeedbackContext'
 import { extractInvoiceInfo, readPdfText, type InvoiceInfo, type KnownContractor } from '../lib/invoiceReader'
 import {
@@ -274,6 +274,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
   const missing = !contractorName ? 'el contratista' : !code ? 'el contrato o presupuesto' : !concept.trim() ? 'el concepto' : !num(amount) ? 'el monto solicitado' : ''
 
   const [sendEmail, setSendEmail] = useState(true)
+  const [syncExcel, setSyncExcel] = useState(true)
   const save = async () => {
     if (missing) { setMessage({ ok: false, text: `Falta ${missing}.` }); return }
     if (support && support.size > MAX_PDF_BYTES) { setMessage({ ok: false, text: 'El PDF pesa más de 4 MB. Comprímelo e inténtalo de nuevo.' }); return }
@@ -389,6 +390,16 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       }
     } else if (sendEmail && !ok) {
       text += ' El email no se envió porque falta algún archivo; reenvíalo desde Historial cuando esté completo.'
+    }
+    if (syncExcel) {
+      try {
+        const r = await syncOrderToExcel(project, orderNo)
+        if (r.mode === 'live') await supabase.from('payment_orders').update({ excel_synced_at: new Date().toISOString() }).eq('project', project).eq('order_no', orderNo)
+        text += r.status === 'already' ? ' La orden ya estaba en el Excel.' : r.mode === 'live' ? ' Excel actualizado.' : ' Copia de prueba del Excel actualizada.'
+      } catch (e) {
+        ok = false
+        text += ` Pero el Excel no se actualizó: ${e instanceof Error ? e.message : 'error'} Puedes sincronizarlo desde Historial.`
+      }
     }
     setMessage({ ok, text })
     setConcept(''); setAmount(''); setAdvance('0'); setRetentions('0'); setComments(''); setSupport(null); setInvoiceNote(null)
@@ -560,6 +571,10 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
         <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
         Enviar el email al guardar
       </label>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" checked={syncExcel} onChange={(e) => setSyncExcel(e.target.checked)} />
+        Agregar la orden al Excel en Dropbox
+      </label>
       <button onClick={save} disabled={saving} className="w-full py-3 rounded-lg bg-gray-900 text-white font-medium disabled:opacity-40">
         {saving ? 'Guardando…' : 'Guardar orden'}
       </button>
@@ -640,6 +655,17 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
       setNote(e instanceof Error ? e.message : 'No se pudo generar el PDF.')
     }
   }
+  const toExcel = async (h: PaymentOrder) => {
+    setNote('Actualizando el Excel…')
+    try {
+      const r = await syncOrderToExcel(project, h.order_no)
+      if (r.mode === 'live') await supabase.from('payment_orders').update({ excel_synced_at: new Date().toISOString() }).eq('id', h.id)
+      setNote(r.status === 'already' ? `La orden ${h.order_no} ya estaba en el Excel.` : r.mode === 'live' ? `Orden ${h.order_no} agregada al Excel.` : `Orden ${h.order_no} agregada a la copia de prueba del Excel.`)
+      await onChanged()
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'No se pudo actualizar el Excel.')
+    }
+  }
   const email = async (h: PaymentOrder) => {
     const ok = await confirm(`¿Enviar por email la orden ${h.order_no} con sus PDFs al destinatario activo?${h.emailed_at ? ' Ya fue enviada antes.' : ''}`, { confirmLabel: 'Enviar' })
     if (!ok) return
@@ -688,6 +714,9 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
           <button onClick={() => remove(h)} className="float-right text-xs text-red-500 ml-2">Borrar</button>
           {h.order_pdf_path && h.order_pdf_path !== 'pending' && (
             <button onClick={() => email(h)} className="float-right text-xs text-emerald-700 ml-2">{h.emailed_at ? 'Reenviar email' : 'Enviar email'}</button>
+          )}
+          {h.order_pdf_path && (
+            <button onClick={() => toExcel(h)} className="float-right text-xs text-gray-600 ml-2">{h.excel_synced_at ? 'Excel ✓' : 'Agregar al Excel'}</button>
           )}
           <button onClick={() => view(h)} className="float-right text-xs text-blue-600 ml-2">Ver PDF</button>
           <div className="text-gray-600">{h.contract_code} · {h.type ?? h.category_n2 ?? ''}</div>

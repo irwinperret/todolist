@@ -37,6 +37,7 @@ export type PaymentOrder = {
   support_path?: string | null
   order_pdf_path?: string | null
   emailed_at?: string | null
+  excel_synced_at?: string | null
   // Only used by the Vermont (VT) project.
   category_n1?: string | null
   category_n2?: string | null
