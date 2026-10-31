@@ -1,10 +1,10 @@
-// Adds an order created in the app to the Excel workbook that holds the payment
+// Adds an order created in the app (or, with action=remove, takes it out again) to the Excel workbook that holds the payment
 // history in Dropbox (one row in the payments sheet and, for Harbour House, the
 // order's tab). While EXCEL_SYNC_LIVE is not "1" it only writes to a test copy next
 // to the real workbook, so the real one is never touched during testing. In live
 // mode the real file is replaced only if nobody changed it in the meantime.
 // Requires a valid Supabase session and the Dropbox env vars of the other functions.
-import { applyOrder, type SyncOrder } from './_excel.js'
+import { applyOrder, removeOrder, type SyncOrder } from './_excel.js'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -73,8 +73,9 @@ export async function POST(request: Request) {
 
   const token = await dropboxToken()
   if (!token) return json({ error: 'not_configured' }, 503)
-  const order = await loadOrder(request, project, orderNo)
-  if (!order) return json({ error: 'order_not_found' }, 404)
+  const removing = params.get('action') === 'remove'
+  const order = removing ? null : await loadOrder(request, project, orderNo)
+  if (!removing && !order) return json({ error: 'order_not_found' }, 404)
 
   const live = process.env.EXCEL_SYNC_LIVE === '1'
   const realPath = `${cfg.dir}/${cfg.name}.xlsm`
@@ -84,14 +85,14 @@ export async function POST(request: Request) {
   const src = live ? await download(token, realPath) : (await download(token, testPath)) ?? (await download(token, realPath))
   if (!src) return json({ error: 'excel_not_found' }, 404)
 
-  let result
+  let result: { bytes: Uint8Array; row: number | null; status: string; tab: string }
   try {
-    result = applyOrder(src.bytes, order)
+    result = removing ? removeOrder(src.bytes, project, orderNo) : applyOrder(src.bytes, order!)
   } catch (e) {
     console.error('excel sync error', e instanceof Error ? e.message : e)
     return json({ error: 'excel_unreadable', detail: e instanceof Error ? e.message.slice(0, 120) : 'error' }, 422)
   }
-  if (result.status === 'already') return json({ mode: live ? 'live' : 'test', status: 'already', row: result.row })
+  if (result.status === 'already' || result.status === 'absent') return json({ mode: live ? 'live' : 'test', status: result.status, row: result.row })
 
   const target = live ? realPath : testPath
   const up = await fetch('https://content.dropboxapi.com/2/files/upload', {
@@ -114,5 +115,5 @@ export async function POST(request: Request) {
     if (up.status === 409 && text.includes('conflict')) return json({ error: 'conflict' }, 409)
     return json({ error: 'upload_failed', status: up.status }, 502)
   }
-  return json({ mode: live ? 'live' : 'test', status: 'added', row: result.row, tab: result.tab, file: target.split('/').pop() })
+  return json({ mode: live ? 'live' : 'test', status: result.status, row: result.row, tab: result.tab, file: target.split('/').pop() })
 }

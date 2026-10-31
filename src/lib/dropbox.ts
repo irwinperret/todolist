@@ -52,14 +52,14 @@ export async function sendOrderEmail(project: string, orderNo: string): Promise<
   throw new Error(`No se pudo enviar el email (${res.status}).`)
 }
 
-export type ExcelSyncResult = { mode: 'live' | 'test'; status: 'added' | 'already'; row: number; tab?: string }
+export type ExcelSyncResult = { mode: 'live' | 'test'; status: 'added' | 'already' | 'removed' | 'absent'; row: number | null; tab?: string }
 
 // Adds the order to the Excel workbook in Dropbox (a test copy until live mode is on).
-export async function syncOrderToExcel(project: string, orderNo: string): Promise<ExcelSyncResult> {
+export async function syncOrderToExcel(project: string, orderNo: string, action: 'add' | 'remove' = 'add'): Promise<ExcelSyncResult> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new Error('Sesión expirada. Vuelve a entrar.')
-  const res = await fetch(`/api/excel-sync?project=${encodeURIComponent(project)}&order=${encodeURIComponent(orderNo)}`, {
+  const res = await fetch(`/api/excel-sync?project=${encodeURIComponent(project)}&order=${encodeURIComponent(orderNo)}${action === 'remove' ? '&action=remove' : ''}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   })

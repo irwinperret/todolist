@@ -251,8 +251,12 @@ export function applyOrder(zip: Uint8Array, o: SyncOrder): SyncResult {
   let tab: SyncResult['tab'] = 'none'
   if (o.project === 'HH') tab = addOrderTab(files, o.order_no) === 'added' ? 'added' : 'exists'
 
-  // Let Excel recalculate everything when it opens the file, and rebuild its
-  // calculation chain (which would not know about the new formulas).
+  return { bytes: finalize(files), row: target.row, status: 'added', tab }
+}
+
+// Let Excel recalculate everything when it opens the file, and rebuild its
+// calculation chain (which would not know about the changed formulas).
+function finalize(files: Record<string, Uint8Array>): Uint8Array {
   let wb = strFromU8(files['xl/workbook.xml'])
   wb = wb.replace(/<calcPr([^>]*?)\/>/, (m, a: string) => (a.includes('fullCalcOnLoad') ? m : `<calcPr${a} fullCalcOnLoad="1"/>`))
   files['xl/workbook.xml'] = strToU8(wb)
@@ -264,5 +268,72 @@ export function applyOrder(zip: Uint8Array, o: SyncOrder): SyncResult {
 
   const out: Zippable = {}
   for (const [name, data] of Object.entries(files)) out[name] = [data, { level: /\.(png|jpe?g|bin)$/i.test(name) ? 0 : 6 }]
-  return { bytes: zipSync(out), row: target.row, status: 'added', tab }
+  return zipSync(out)
+}
+
+// ---- removing an order ----
+
+export type RemoveResult = { bytes: Uint8Array; row: number | null; status: 'removed' | 'absent'; tab: 'removed' | 'kept' | 'none' }
+
+// Empties the order's row (keeping only its sequence number in column A, like the
+// unused rows below it) and, for Harbour House, deletes the order's tab unless some
+// chart, table or formula still refers to it.
+export function removeOrder(zip: Uint8Array, project: string, orderNo: string): RemoveResult {
+  const files = unzipSync(zip)
+  const { path } = sheetPath(files, SHEET_NAME[project])
+  let xml = strFromU8(files[path])
+  const target = findTargetRow(xml, orderNo)
+  let row: number | null = null
+  if (target.exists) {
+    row = target.row
+    const found = findRow(xml, row)!
+    const a = [...found.inner.matchAll(cellRe)].find((m) => m[1] === 'A')
+    const open = found.tag.replace(/\s+spans="[^"]*"/, '').replace(/\/>$/, '>')
+    xml = xml.slice(0, found.start) + `${open}${a ? a[0] : ''}</row>` + xml.slice(found.end)
+    files[path] = strToU8(xml)
+  }
+  const tab = project === 'HH' ? removeOrderTab(files, orderNo) : 'none'
+  if (!target.exists && tab !== 'removed') return { bytes: zip, row: null, status: 'absent', tab }
+  return { bytes: finalize(files), row, status: row !== null ? 'removed' : 'absent', tab }
+}
+
+function removeOrderTab(files: Record<string, Uint8Array>, orderNo: string): 'removed' | 'kept' | 'none' {
+  const wbXml = strFromU8(files['xl/workbook.xml'])
+  const tags = [...wbXml.matchAll(/<sheet\b[^>]*\/>/g)].map((m) => m[0])
+  const names = tags.map((t) => unesc(t.match(/name="([^"]*)"/)![1]))
+  const idx = names.indexOf(orderNo)
+  const payIdx = names.indexOf('PagosBH')
+  if (idx < 0 || payIdx < 0 || idx >= payIdx) return 'none'
+
+  // Anything that still points at this tab means it stays.
+  const needle = `'${orderNo}'!`
+  for (const [name, data] of Object.entries(files)) {
+    if (!/^xl\/(charts|pivotCache|pivotTables|worksheets|externalLinks)\/.*\.xml$/.test(name)) continue
+    if (strFromU8(data).includes(needle)) return 'kept'
+  }
+  const ownNames = new RegExp(`<definedName[^>]*localSheetId="${idx}"[^>]*>[\\s\\S]*?</definedName>`, 'g')
+  if (wbXml.replace(tags[idx], '').replace(ownNames, '').includes(needle)) return 'kept'
+
+  const rid = tags[idx].match(/r:id="([^"]+)"/)![1]
+  const rels = strFromU8(files['xl/_rels/workbook.xml.rels'])
+  const relTag = [...rels.matchAll(/<Relationship\b[^>]*\/>/g)].map((m) => m[0]).find((t) => t.includes(`Id="${rid}"`))!
+  const sheetFile = 'xl/' + relTag.match(/Target="([^"]+)"/)![1].replace(/^\/?(xl\/)?/, '')
+  const relsFile = sheetFile.replace('worksheets/', 'worksheets/_rels/') + '.rels'
+  const gone = [sheetFile, relsFile]
+  if (files[relsFile]) {
+    const dr = strFromU8(files[relsFile]).match(/Target="\.\.\/drawings\/(drawing\d+\.xml)"/)?.[1]
+    if (dr) gone.push(`xl/drawings/${dr}`, `xl/drawings/_rels/${dr}.rels`)
+  }
+  let ct = strFromU8(files['[Content_Types].xml'])
+  for (const g of gone) {
+    delete files[g]
+    ct = ct.replace(new RegExp(`<Override[^>]*PartName="/${g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*/>`), '')
+  }
+  files['[Content_Types].xml'] = strToU8(ct)
+  files['xl/_rels/workbook.xml.rels'] = strToU8(rels.replace(relTag, ''))
+  let wb2 = wbXml.replace(tags[idx], '')
+  wb2 = wb2.replace(new RegExp(`<definedName[^>]*localSheetId="${idx}"[^>]*>[\\s\\S]*?</definedName>`, 'g'), '')
+  wb2 = wb2.replace(/localSheetId="(\d+)"/g, (_m, i: string) => `localSheetId="${Number(i) > idx ? Number(i) - 1 : Number(i)}"`)
+  files['xl/workbook.xml'] = strToU8(wb2)
+  return 'removed'
 }

@@ -615,14 +615,21 @@ function History({ history, project, onChanged }: { history: PaymentOrder[]; pro
     if (h.order_pdf_path && h.order_pdf_path !== 'pending') files.push('order')
     const dropboxLine = files.length
       ? 'También se borrarán sus archivos de Dropbox (quedan en "Archivos eliminados" de Dropbox por un tiempo).'
-      : 'No tiene archivos guardados por la app, así que no se toca nada en Dropbox.'
+      : 'No tiene archivos guardados por la app, así que no se borran archivos de Dropbox.'
     const ok = await confirm(
-      `¿Borrar la orden ${h.order_no} (${h.contractor ?? ''}, ${money(h.net_to_pay)} ${h.currency ?? ''})? Dejará de contar en los saldos y acumulados de su contrato. ${dropboxLine}`,
+      `¿Borrar la orden ${h.order_no} (${h.contractor ?? ''}, ${money(h.net_to_pay)} ${h.currency ?? ''})? Dejará de contar en los saldos y acumulados de su contrato. ${dropboxLine} También se quitará su línea del Excel (y la pestaña, en Harbour House); Dropbox guarda versiones anteriores del archivo por si necesitas recuperarla.`,
       { danger: true, confirmLabel: 'Borrar' }
     )
     if (!ok || !h.id) return
     setNote('Borrando…')
     try {
+      // Take the order out of the Excel first; if that fails, ask before going on.
+      try {
+        await syncOrderToExcel(project, h.order_no, 'remove')
+      } catch (e) {
+        const go = await confirm(`No se pudo quitar la orden del Excel: ${e instanceof Error ? e.message : 'error'} ¿Borrarla de la app de todas formas? Tendrías que quitarla del Excel a mano.`, { danger: true, confirmLabel: 'Borrar igual' })
+        if (!go) { setNote(''); return }
+      }
       if (files.length) await deleteOrderFiles(project, h.order_no, files)
       const { error } = await supabase.from('payment_orders').delete().eq('id', h.id)
       if (error) throw new Error(error.message)
