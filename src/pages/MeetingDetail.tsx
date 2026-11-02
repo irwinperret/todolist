@@ -60,6 +60,7 @@ type ItemActions = {
   onConfirmConvert: (item: MeetingItem) => void
   onToggleDone: (item: MeetingItem) => void
   onToggleLongTerm: (item: MeetingItem) => void
+  onToggleArchive: (item: MeetingItem) => void
   onUnlink: (item: MeetingItem) => void
   onSaveComment: (item: MeetingItem, comment: string) => void
   onSaveContent: (item: MeetingItem, content: string) => void
@@ -434,6 +435,19 @@ export default function MeetingDetail() {
     load()
   }
 
+  // Checked-off items can be filed away; they stay under the same heading, in a
+  // collapsed "Archivados" list, and can be restored from there.
+  const toggleArchive = async (item: MeetingItem) => {
+    const next = !item.archived
+    const { error } = await supabase.from('meeting_items').update({ archived: next }).eq('id', item.id)
+    if (error) return notifyError(error.message)
+    pushUndo(`${next ? 'Archivar' : 'Restaurar'} "${clip(item.content)}"`, async () => {
+      assertOk(await supabase.from('meeting_items').update({ archived: item.archived }).eq('id', item.id))
+      await load()
+    })
+    load()
+  }
+
   const toggleLongTerm = async (item: MeetingItem) => {
     const { error } = await supabase.from('meeting_items').update({ is_long_term: !item.is_long_term }).eq('id', item.id)
     if (error) return notifyError(error.message)
@@ -538,6 +552,7 @@ export default function MeetingDetail() {
     onConfirmConvert: confirmConvert,
     onToggleDone: toggleDone,
     onToggleLongTerm: toggleLongTerm,
+    onToggleArchive: toggleArchive,
     onUnlink: unlinkItem,
     onSaveComment: saveItemComment,
     onSaveContent: saveItemContent,
@@ -680,6 +695,7 @@ function MinuteCard(props: {
   const itemsByCategory = useMemo(() => {
     const map: Record<string, MeetingItem[]> = {}
     for (const item of m.items) {
+      if (item.archived) continue
       const key = item.category_id ?? '__none__'
       map[key] = map[key] ?? []
       map[key].push(item)
@@ -690,6 +706,16 @@ function MinuteCard(props: {
     for (const key of Object.keys(map)) {
       map[key].sort((a, b) => a.sort_order - b.sort_order)
     }
+    return map
+  }, [m.items])
+  const archivedByCategory = useMemo(() => {
+    const map: Record<string, MeetingItem[]> = {}
+    for (const item of m.items) {
+      if (!item.archived) continue
+      const key = item.category_id ?? '__none__'
+      ;(map[key] = map[key] ?? []).push(item)
+    }
+    for (const key of Object.keys(map)) map[key].sort((a, b) => a.sort_order - b.sort_order)
     return map
   }, [m.items])
   const uncategorized = itemsByCategory['__none__'] ?? []
@@ -722,6 +748,7 @@ function MinuteCard(props: {
     const catKey = (catId: string | null) => catId ?? '__none__'
     const byCat: Record<string, MeetingItem[]> = {}
     for (const it of m.items) {
+      if (it.archived) continue
       const k = catKey(it.category_id)
       byCat[k] = byCat[k] ?? []
       byCat[k].push(it)
@@ -826,6 +853,7 @@ function MinuteCard(props: {
                 node={node}
                 depth={0}
                 itemsByCategory={itemsByCategory}
+                archivedByCategory={archivedByCategory}
                 itemActions={props.itemActions}
                 editingCategoryId={props.editingCategoryId}
                 editingCategoryName={props.editingCategoryName}
@@ -836,7 +864,7 @@ function MinuteCard(props: {
                 onDeleteCategory={props.onDeleteCategory}
               />
             ))}
-            <UncategorizedZone items={uncategorized} itemActions={props.itemActions} />
+            <UncategorizedZone items={uncategorized} archived={archivedByCategory['__none__'] ?? []} itemActions={props.itemActions} />
           </div>
         </DndContext>
       )}
@@ -946,6 +974,7 @@ function CategoryBlock(props: {
   node: CategoryNode
   depth: number
   itemsByCategory: Record<string, MeetingItem[]>
+  archivedByCategory: Record<string, MeetingItem[]>
   itemActions: ItemActions
   editingCategoryId: string | null
   editingCategoryName: string
@@ -994,6 +1023,7 @@ function CategoryBlock(props: {
           ))}
         </SortableContext>
       </div>
+      <ArchivedList items={props.archivedByCategory[props.node.id] ?? []} actions={props.itemActions} />
 
       {props.node.children.map((child) => (
         <CategoryBlock
@@ -1001,6 +1031,7 @@ function CategoryBlock(props: {
           node={child}
           depth={props.depth + 1}
           itemsByCategory={props.itemsByCategory}
+          archivedByCategory={props.archivedByCategory}
           itemActions={props.itemActions}
           editingCategoryId={props.editingCategoryId}
           editingCategoryName={props.editingCategoryName}
@@ -1015,7 +1046,32 @@ function CategoryBlock(props: {
   )
 }
 
-function UncategorizedZone(props: { items: MeetingItem[]; itemActions: ItemActions }) {
+function ArchivedList({ items, actions }: { items: MeetingItem[]; actions: ItemActions }) {
+  const [open, setOpen] = useState(false)
+  if (items.length === 0) return null
+  return (
+    <div className="pl-1">
+      <button onClick={() => setOpen(!open)} className="text-xs text-gray-400 hover:text-gray-600">
+        {open ? '▾' : '▸'} Archivados ({items.length})
+      </button>
+      {open && (
+        <div className="mt-1 space-y-1">
+          {items.map((it) => (
+            <div key={it.id} className="flex items-start gap-2 pl-3">
+              <span
+                className="text-xs text-gray-400 line-through min-w-0 flex-1 whitespace-normal break-words"
+                dangerouslySetInnerHTML={{ __html: formatRichText(it.content) }}
+              />
+              <button onClick={() => actions.onToggleArchive(it)} className="text-xs text-blue-600 shrink-0">Restaurar</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UncategorizedZone(props: { items: MeetingItem[]; archived: MeetingItem[]; itemActions: ItemActions }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'cat:__none__' })
   return (
     <div className="space-y-1.5">
@@ -1028,6 +1084,7 @@ function UncategorizedZone(props: { items: MeetingItem[]; itemActions: ItemActio
           ))}
         </SortableContext>
       </div>
+      <ArchivedList items={props.archived} actions={props.itemActions} />
     </div>
   )
 }
@@ -1149,6 +1206,9 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
               <span className="text-xs bg-gray-800 text-white rounded-full px-2 py-0.5 shrink-0">{task.status_label}</span>
             </div>
           </Link>
+          {item.is_done && (
+            <button onClick={() => actions.onToggleArchive(item)} className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 shrink-0 self-center">Archivar</button>
+          )}
           <button
             onClick={() => actions.onUnlink(item)}
             className="text-xs text-red-400 shrink-0 self-center px-1"
@@ -1202,6 +1262,9 @@ function ItemRowView({ item, actions }: { item: MeetingItem; actions: ItemAction
       </div>
       {commentEditor}
       <div className="flex gap-1 flex-wrap justify-end ml-7">
+        {item.is_done && (
+          <button onClick={() => actions.onToggleArchive(item)} className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">Archivar</button>
+        )}
         {!item.is_long_term && (
           <>
             <button onClick={() => actions.onOpenConvert(item, 2)} className="text-xs bg-green-50 text-green-800 rounded-full px-2 py-0.5">To Do</button>

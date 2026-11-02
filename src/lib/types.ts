@@ -130,6 +130,7 @@ export type MeetingItem = {
   category_id: string | null
   is_done: boolean
   is_long_term: boolean
+  archived: boolean
   sort_order: number
   created_at: string
 }
