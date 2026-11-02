@@ -522,6 +522,13 @@ export default function Dashboard() {
                 </span>
               </div>
 
+              {t.comment && !isExpanded && (
+                <p
+                  className={`mt-1.5 text-xs line-clamp-2 break-words ${t.status_id === 8 ? 'text-gray-400' : 'text-gray-600'}`}
+                  dangerouslySetInnerHTML={{ __html: formatRichText(t.comment) }}
+                />
+              )}
+
               {isExpanded && (
                 <div className="mt-3 pt-3 border-t border-gray-100 space-y-2 text-sm">
                   {person && (
