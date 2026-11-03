@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLookups } from '../lib/useLookups'
 import type { TaskPhoto, TaskScore, TaskLite, TaskVoiceNote } from '../lib/types'
-import { useFormatShortcuts, formatRichText, FormatToolbar } from '../components/RichText'
+import { useFormatShortcuts, FormatToolbar } from '../components/RichText'
 import { getFreedTasks, type FreedTask } from '../lib/dependencies'
 import FreedTasksModal from '../components/FreedTasksModal'
 import { useFeedback } from '../lib/FeedbackContext'
@@ -40,13 +40,11 @@ export default function TaskDetail() {
   const [showMore, setShowMore] = useState(!isNew)
   const [photos, setPhotos] = useState<TaskPhoto[]>([])
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
-  const [newNote, setNewNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [resolutionPrompt, setResolutionPrompt] = useState(false)
   const [resolutionText, setResolutionText] = useState('')
   const titleShortcuts = useFormatShortcuts<HTMLInputElement>(task.title ?? '', (v) => setTask({ ...task, title: v }))
   const commentShortcuts = useFormatShortcuts<HTMLTextAreaElement>(task.comment ?? '', (v) => setTask({ ...task, comment: v }))
-  const newNoteShortcuts = useFormatShortcuts<HTMLInputElement>(newNote, setNewNote)
   const resolutionShortcuts = useFormatShortcuts<HTMLTextAreaElement>(resolutionText, setResolutionText)
   const [freedTasks, setFreedTasks] = useState<FreedTask[] | null>(null)
   const [postponePrompt, setPostponePrompt] = useState(false)
@@ -239,27 +237,13 @@ export default function TaskDetail() {
     navigate(returnTo)
   }
 
-  // A dated note is added to the end of the task's Comentario (one place for all text),
-  // and the linked meeting item shows it too.
-  const handleAddNote = async () => {
-    if (!newNote.trim() || isNew) return
+  // Adds today's date as a new line at the end of the Comentario, ready to type after.
+  const addDateToComment = () => {
     const d = new Date()
     const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-    const line = `${d.getDate()}-${months[d.getMonth()]}: ${newNote.trim()}`
-    const prev = task.comment ?? ''
-    const next = prev.trim() ? `${prev.replace(/\s+$/, '')}\n${line}` : line
-    const { error } = await supabase.from('tasks').update({ comment: next }).eq('id', id)
-    if (error) return notifyError(error.message)
-    const { data: prevItems } = await supabase.from('meeting_items').select('id, comment').eq('task_id', id)
-    await supabase.from('meeting_items').update({ comment: next }).eq('task_id', id)
-    setTask({ ...task, comment: next })
-    setNewNote('')
-    const taskId = id!
-    pushUndo('Nota agregada al comentario', async () => {
-      assertOk(await supabase.from('tasks').update({ comment: prev || null }).eq('id', taskId))
-      for (const it of prevItems ?? []) assertOk(await supabase.from('meeting_items').update({ comment: it.comment }).eq('id', it.id))
-      await load()
-    })
+    const prev = (task.comment ?? '').replace(/\s+$/, '')
+    setTask({ ...task, comment: `${prev}${prev ? '\n' : ''}${d.getDate()}-${months[d.getMonth()]}: ` })
+    setShowMore(true)
   }
 
   const handlePhotoUpload = async (file: File) => {
@@ -510,7 +494,7 @@ export default function TaskDetail() {
           </div>
         )}
         <button onClick={() => setShowMore((v) => !v)} className="text-sm text-gray-500 underline">{showMore ? 'Ocultar detalles' : 'Agregar más detalle'}</button>
-        {showMore && <div className="space-y-3 pt-2 border-t border-gray-100"><input type="text" placeholder="Subactividad" value={task.subactivity ?? ''} onChange={(e) => setTask({ ...task, subactivity: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><input type="text" placeholder="Disciplina" value={task.discipline ?? ''} onChange={(e) => setTask({ ...task, discipline: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><InlinePicker value={task.indirect_id ?? ''} placeholder="Involucrado (opcional)" options={[{ value: '', label: '(Ninguno)' }, ...people.map((p) => ({ value: p.id, label: p.name }))]} onChange={(v) => setTask({ ...task, indirect_id: v })} /><input type="text" placeholder="Ubicación (opcional)" value={task.location ?? ''} onChange={(e) => setTask({ ...task, location: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><div><label className="text-xs text-gray-500">Fecha vencimiento/seguimiento</label><div className="flex gap-2 items-center"><input type="date" value={task.due_date ?? ''} onChange={(e) => setTask({ ...task, due_date: e.target.value || null })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" />{task.due_date && <button type="button" onClick={() => setTask({ ...task, due_date: null })} className="shrink-0 px-3 py-2.5 text-sm text-gray-500 border border-gray-300 rounded-lg">Quitar</button>}</div></div><div className="space-y-1.5"><textarea ref={commentShortcuts.ref} placeholder="Comentario" value={task.comment ?? ''} onChange={(e) => setTask({ ...task, comment: e.target.value })} onKeyDown={commentShortcuts.onKeyDown} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" rows={3} /><FormatToolbar bold={commentShortcuts.bold} italic={commentShortcuts.italic} underline={commentShortcuts.underline} /></div></div>}
+        {showMore && <div className="space-y-3 pt-2 border-t border-gray-100"><input type="text" placeholder="Subactividad" value={task.subactivity ?? ''} onChange={(e) => setTask({ ...task, subactivity: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><input type="text" placeholder="Disciplina" value={task.discipline ?? ''} onChange={(e) => setTask({ ...task, discipline: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><InlinePicker value={task.indirect_id ?? ''} placeholder="Involucrado (opcional)" options={[{ value: '', label: '(Ninguno)' }, ...people.map((p) => ({ value: p.id, label: p.name }))]} onChange={(v) => setTask({ ...task, indirect_id: v })} /><input type="text" placeholder="Ubicación (opcional)" value={task.location ?? ''} onChange={(e) => setTask({ ...task, location: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><div><label className="text-xs text-gray-500">Fecha vencimiento/seguimiento</label><div className="flex gap-2 items-center"><input type="date" value={task.due_date ?? ''} onChange={(e) => setTask({ ...task, due_date: e.target.value || null })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" />{task.due_date && <button type="button" onClick={() => setTask({ ...task, due_date: null })} className="shrink-0 px-3 py-2.5 text-sm text-gray-500 border border-gray-300 rounded-lg">Quitar</button>}</div></div><div className="space-y-1.5"><textarea ref={commentShortcuts.ref} placeholder="Comentario" value={task.comment ?? ''} onChange={(e) => setTask({ ...task, comment: e.target.value })} onKeyDown={commentShortcuts.onKeyDown} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" rows={3} /><div className="flex items-center gap-3"><FormatToolbar bold={commentShortcuts.bold} italic={commentShortcuts.italic} underline={commentShortcuts.underline} /><button type="button" onClick={addDateToComment} className="text-xs text-blue-600">+ Fecha de hoy</button></div></div></div>}
         <div className="flex gap-2"><button onClick={handleCancel} className="flex-1 border border-red-900 text-red-900 rounded-lg py-3 font-medium">Cancelar</button><button onClick={handleSave} disabled={saving} className="flex-1 bg-gray-900 text-white rounded-lg py-3 font-medium disabled:opacity-50">{saving ? 'Guardando...' : isNew ? 'Crear tarea' : 'Guardar cambios'}</button></div>
       </div>
 
@@ -518,7 +502,7 @@ export default function TaskDetail() {
 
       <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Fotos</p><div className="flex gap-2 flex-wrap">{photos.map((p) => <img key={p.id} src={photoUrls[p.id]} className="w-20 h-20 object-cover rounded-lg border border-gray-200" />)}<label className="w-20 h-20 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg text-gray-400 text-2xl cursor-pointer">+<input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handlePhotoUpload(file) }} /></label></div></div>
 
-      {!isNew && <><div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Notas</p><div className="flex gap-2"><input ref={newNoteShortcuts.ref} type="text" placeholder="Agregar nota (se guarda con la fecha en el comentario)..." value={newNote} onChange={(e) => setNewNote(e.target.value)} onKeyDown={(e) => { newNoteShortcuts.onKeyDown(e); if (e.key === 'Enter') handleAddNote() }} className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" /><button onClick={handleAddNote} className="bg-gray-900 text-white rounded-lg px-4 text-sm">Agregar</button></div>{task.comment ? <p className="text-sm text-gray-800 whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: formatRichText(task.comment) }} /> : <p className="text-sm text-gray-400">Sin notas todavía.</p>}</div>
+      {!isNew && <>
 
       <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Dependencias</p><div><p className="text-xs text-gray-500 mb-1">Esta tarea depende de:</p>{dependsOn.length === 0 && <p className="text-sm text-gray-400">Ninguna</p>}<div className="space-y-1">{dependsOn.map((t) => <div key={t.id} className={`flex items-center justify-between text-sm border-l-2 pl-2 py-1 ${t.resolved_at ? 'border-green-300' : 'border-orange-300'}`}><Link to={`/task/${t.id}`} className={`truncate ${t.resolved_at ? 'text-green-700 line-through' : 'text-gray-800'}`}>{t.resolved_at ? '✓ ' : ''}{t.title}</Link><button onClick={() => removeDependency(t.id)} className="text-xs text-gray-400 shrink-0 ml-2">Quitar</button></div>)}</div></div><div className="relative"><input type="text" placeholder="Buscar o elegir tarea para agregar como dependencia..." value={depSearch} onFocus={() => searchDependencyCandidates(depSearch)} onChange={(e) => searchDependencyCandidates(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />{depSearching && <p className="text-xs text-gray-400 mt-1">Buscando...</p>}{depResults.length > 0 && <div className="border border-gray-200 rounded-lg mt-1 divide-y divide-gray-100 bg-white">{depResults.map((t) => <button key={t.id} onClick={() => addDependency(t.id, t.status_id)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">{t.title}</button>)}</div>}</div>{blocks.length > 0 && <div><p className="text-xs text-gray-500 mb-1">Esta tarea bloquea a:</p><div className="space-y-1">{blocks.map((t) => <Link key={t.id} to={`/task/${t.id}`} className={`block text-sm border-l-2 pl-2 py-1 truncate ${t.resolved_at ? 'border-green-300 text-green-700 line-through' : 'border-red-300 text-gray-800'}`}>{t.resolved_at ? '✓ ' : ''}{t.title}</Link>)}</div></div>}</div>
 
