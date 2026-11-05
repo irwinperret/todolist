@@ -33,6 +33,7 @@ export default function AgendaStrip() {
   const [error, setError] = useState(false)
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [postponed, setPostponed] = useState<Postponed[]>([])
+  const [showAll, setShowAll] = useState(false)
 
   const loadPostponed = useCallback(async () => {
     const { data: rows } = await supabase
@@ -41,7 +42,6 @@ export default function AgendaStrip() {
       .eq('status_id', 6)
       .not('postponed_until', 'is', null)
       .order('postponed_until', { ascending: true })
-      .limit(5)
     if (rows) setPostponed(rows as Postponed[])
   }, [])
 
@@ -158,19 +158,26 @@ export default function AgendaStrip() {
                 </div>
               )
             })}
-            <div className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 p-2">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setShowAll(true)}
+              onKeyDown={(e) => { if (e.key === 'Enter') setShowAll(true) }}
+              title="Ver todas las pospuestas"
+              className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 p-2 cursor-pointer"
+            >
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 leading-tight">Actividades pospuestas</p>
-              <p className="text-[11px] text-amber-700 mb-1">Próximas 5</p>
+              <p className="text-[11px] text-amber-700 mb-1">Próximas 5{postponed.length > 5 ? ` de ${postponed.length}` : ''}</p>
               {postponed.length === 0 ? (
                 <p className="text-xs text-gray-400">Ninguna</p>
               ) : (
                 <ul className="space-y-1.5">
-                  {postponed.map((t) => (
+                  {postponed.slice(0, 5).map((t) => (
                     <li key={t.id} className="leading-tight">
                       <span className="block text-[11px] font-medium text-gray-500">
                         {new Date(t.postponed_until + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}
                       </span>
-                      <Link to={`/task/${t.id}`} className="block text-xs text-gray-800 break-words underline decoration-gray-300 underline-offset-2">
+                      <Link to={`/task/${t.id}`} onClick={(e) => e.stopPropagation()} className="block text-xs text-gray-800 break-words underline decoration-gray-300 underline-offset-2">
                         {t.title}
                       </Link>
                     </li>
@@ -179,6 +186,27 @@ export default function AgendaStrip() {
               )}
             </div>
           </div>
+          {showAll && (
+            <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-30" onClick={() => setShowAll(false)}>
+              <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <p className="font-medium text-gray-900">Actividades pospuestas ({postponed.length})</p>
+                  <button onClick={() => setShowAll(false)} className="text-sm text-gray-500 px-2" aria-label="Cerrar">✕</button>
+                </div>
+                <ul className="overflow-y-auto px-4 py-2 divide-y divide-gray-100">
+                  {postponed.length === 0 && <li className="py-3 text-sm text-gray-400">Ninguna.</li>}
+                  {postponed.map((t) => (
+                    <li key={t.id} className="py-2 flex gap-3 items-baseline">
+                      <span className="text-xs font-medium text-gray-500 shrink-0 w-14">
+                        {new Date(t.postponed_until + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                      </span>
+                      <Link to={`/task/${t.id}`} className="text-sm text-gray-800 break-words underline decoration-gray-300 underline-offset-2">{t.title}</Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
           {data?.failed ? (
             <p className="text-xs text-amber-700 mt-2 px-1">No se pudo leer {data.failed} calendario(s).</p>
           ) : null}
