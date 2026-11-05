@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { googleCalendarDayUrl } from '../lib/calendar'
 
@@ -12,6 +13,8 @@ type AgendaEvent = {
 }
 
 type ApiResult = { configured: boolean; failed?: number; events: AgendaEvent[] }
+
+type Postponed = { id: string; title: string; postponed_until: string }
 
 const DAYS = 3 // today + the next 2 days
 
@@ -29,8 +32,21 @@ export default function AgendaStrip() {
   const [data, setData] = useState<ApiResult | null>(null)
   const [error, setError] = useState(false)
   const [collapsed, setCollapsed] = useState(readCollapsed)
+  const [postponed, setPostponed] = useState<Postponed[]>([])
+
+  const loadPostponed = useCallback(async () => {
+    const { data: rows } = await supabase
+      .from('task_scores')
+      .select('id, title, postponed_until')
+      .eq('status_id', 6)
+      .not('postponed_until', 'is', null)
+      .order('postponed_until', { ascending: true })
+      .limit(5)
+    if (rows) setPostponed(rows as Postponed[])
+  }, [])
 
   const load = useCallback(async () => {
+    loadPostponed()
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
@@ -48,7 +64,7 @@ export default function AgendaStrip() {
     } catch {
       setError(true)
     }
-  }, [])
+  }, [loadPostponed])
 
   useEffect(() => {
     load()
@@ -96,7 +112,7 @@ export default function AgendaStrip() {
 
       {!collapsed && (
         <div className="px-2 pb-2">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {days.map((day, i) => {
               const events = eventsFor(day)
               return (
@@ -142,6 +158,26 @@ export default function AgendaStrip() {
                 </div>
               )
             })}
+            <div className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 p-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 leading-tight">Actividades pospuestas</p>
+              <p className="text-[11px] text-amber-700 mb-1">Próximas 5</p>
+              {postponed.length === 0 ? (
+                <p className="text-xs text-gray-400">Ninguna</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {postponed.map((t) => (
+                    <li key={t.id} className="leading-tight">
+                      <span className="block text-[11px] font-medium text-gray-500">
+                        {new Date(t.postponed_until + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                      </span>
+                      <Link to={`/task/${t.id}`} className="block text-xs text-gray-800 break-words underline decoration-gray-300 underline-offset-2">
+                        {t.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
           {data?.failed ? (
             <p className="text-xs text-amber-700 mt-2 px-1">No se pudo leer {data.failed} calendario(s).</p>
