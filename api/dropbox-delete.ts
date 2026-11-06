@@ -1,7 +1,7 @@
 // Removes the files this app saved for one payment order from Dropbox (the
-// supplier's invoice and/or the generated order PDF) and then the order's folder
-// if it ended up empty. Only those two exact file names are ever touched, never
-// anything else in the folder. Dropbox keeps deleted files in "Deleted files", so
+// supplier's invoice and/or the generated order PDF). The order's folder is never
+// removed. Only those two exact file names are ever touched, never anything else
+// in the folder. Dropbox keeps deleted files in "Deleted files", so
 // they can still be restored from there for a while. Requires a valid Supabase
 // session.
 
@@ -97,12 +97,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // Remove the order's folder only if nothing else is left in it.
-  let folderRemoved = false
-  const list = await dbx(token, 'files/list_folder', { path: dir, recursive: false })
-  if (list.ok) {
-    const { entries } = (await list.json()) as { entries: unknown[] }
-    if (entries.length === 0) folderRemoved = (await dbx(token, 'files/delete_v2', { path: dir })).ok
-  }
-  return json({ deleted: names, folderRemoved })
+  // The order's folder is always kept (it may hold other documents), even when empty.
+  return json({ deleted: names, folderRemoved: false })
 }

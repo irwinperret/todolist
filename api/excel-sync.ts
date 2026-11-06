@@ -3,7 +3,7 @@
 // order's tab). It writes to the real workbook, replacing it only if nobody changed it in the
 // meantime. With EXCEL_SYNC_LIVE=0 it writes to a test copy next to it instead.
 // Requires a valid Supabase session and the Dropbox env vars of the other functions.
-import { applyOrder, removeOrder, type SyncOrder } from './_excel.js'
+import { applyOrder, maxOrderNo, removeOrder, type SyncOrder } from './_excel.js'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -70,10 +70,22 @@ export async function POST(request: Request) {
   const project = params.get('project') ?? ''
   const orderNo = params.get('order') ?? ''
   const cfg = FILES[project]
-  if (!cfg || !/^[0-9A-Za-z-]{1,20}$/.test(orderNo)) return json({ error: 'bad request' }, 400)
+  const asking = params.get('action') === 'next'
+  if (!cfg || (!asking && !/^[0-9A-Za-z-]{1,20}$/.test(orderNo))) return json({ error: 'bad request' }, 400)
 
   const token = await dropboxToken()
   if (!token) return json({ error: 'not_configured' }, 503)
+
+  // Read-only: the highest order number already written in the real workbook.
+  if (asking) {
+    const file = await download(token, `${cfg.dir}/${cfg.name}.xlsm`)
+    if (!file) return json({ error: 'excel_not_found' }, 404)
+    try {
+      return json({ max: maxOrderNo(file.bytes, project) })
+    } catch {
+      return json({ error: 'excel_unreadable' }, 422)
+    }
+  }
   const removing = params.get('action') === 'remove'
   const order = removing ? null : await loadOrder(request, project, orderNo)
   if (!removing && !order) return json({ error: 'order_not_found' }, 404)

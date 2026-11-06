@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import InlinePicker from './InlinePicker'
 import { loadActiveRecipient, type PaymentRecipient } from './PaymentRecipients'
-import { MAX_PDF_BYTES, deleteOrderFiles, sendOrderEmail, syncOrderToExcel, uploadOrderPdf } from '../lib/dropbox'
+import { MAX_PDF_BYTES, deleteOrderFiles, excelLastOrder, sendOrderEmail, syncOrderToExcel, uploadOrderPdf } from '../lib/dropbox'
 import { useFeedback } from '../lib/FeedbackContext'
 import { extractInvoiceInfo, readPdfText, type InvoiceInfo, type KnownContractor } from '../lib/invoiceReader'
 import {
@@ -161,7 +161,16 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
     return out
   }, [recent, contractor])
 
-  const orderNo = nextOrderNumber(history)
+  // The Excel is also checked, so a number already used there (e.g. added by hand) is skipped.
+  const [excelMax, setExcelMax] = useState<number | null>(null)
+  useEffect(() => {
+    let alive = true
+    excelLastOrder(project).then((m) => { if (alive) setExcelMax(m) })
+    return () => { alive = false }
+  }, [project])
+  const fromHistory = nextOrderNumber(history)
+  const orderNo = excelMax !== null && excelMax + 1 > Number(fromHistory) ? String(excelMax + 1) : fromHistory
+  const excelAhead = orderNo !== fromHistory
 
   const known = useMemo<KnownContractor[]>(() => {
     const map = new Map<string, KnownContractor>()
@@ -441,6 +450,7 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
         <span className="text-sm text-gray-500">Orden de pago No.</span>
         <span className="text-lg font-bold text-gray-900">{orderNo}</span>
       </div>
+      {excelAhead && <p className="text-xs text-amber-700 -mt-2">El Excel ya tiene órdenes hasta la {excelMax}; esta será la {orderNo}.</p>}
 
       <div>
         <label className={label}>Contratista</label>

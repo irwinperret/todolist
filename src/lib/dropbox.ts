@@ -52,6 +52,24 @@ export async function sendOrderEmail(project: string, orderNo: string): Promise<
   throw new Error(`No se pudo enviar el email (${res.status}).`)
 }
 
+// Highest order number already in the Excel of a project, or null if it can't be read.
+export async function excelLastOrder(project: string): Promise<number | null> {
+  try {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) return null
+    const res = await fetch(`/api/excel-sync?project=${encodeURIComponent(project)}&action=next`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return null
+    const body = (await res.json()) as { max?: number }
+    return typeof body.max === 'number' ? body.max : null
+  } catch {
+    return null
+  }
+}
+
 export type ExcelSyncResult = { mode: 'live' | 'test'; status: 'added' | 'already' | 'linked' | 'removed' | 'absent'; row: number | null; tab?: string }
 
 // Adds the order to the Excel workbook in Dropbox (a test copy until live mode is on).

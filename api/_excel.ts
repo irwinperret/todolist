@@ -325,6 +325,25 @@ function removeHyperlink(files: Record<string, Uint8Array>, sheetFile: string, r
 
 export type SyncResult = { bytes: Uint8Array; row: number; status: 'added' | 'already' | 'linked'; tab: 'added' | 'exists' | 'none' }
 
+// Order number in the last filled row of column B of the payments sheet
+// (what the next order should follow). Read only, nothing is modified.
+export function maxOrderNo(zip: Uint8Array, project: string): number {
+  const files = unzipSync(zip)
+  const { path } = sheetPath(files, SHEET_NAME[project])
+  const xml = strFromU8(files[path])
+  // The order in the last filled row counts (older Harbour House rows were numbered
+  // on another scale, so the largest value is not the latest order).
+  let lastRow = 0
+  let last = 0
+  for (const m of xml.matchAll(/<c r="B(\d+)"[^>]*?>(?:<f[^>]*>[^<]*<\/f>|<f[^>]*\/>)?<v>([^<]+)<\/v><\/c>/g)) {
+    const row = Number(m[1])
+    if (row < 5 || row <= lastRow) continue
+    const v = unesc(m[2])
+    if (/^\d+$/.test(v) && v !== '0') { lastRow = row; last = Number(v) }
+  }
+  return last
+}
+
 export function applyOrder(zip: Uint8Array, o: SyncOrder): SyncResult {
   const files = unzipSync(zip)
   const { path } = sheetPath(files, SHEET_NAME[o.project])
