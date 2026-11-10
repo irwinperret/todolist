@@ -36,7 +36,11 @@ export default function DependencyList(props: {
     props.direction === 'blockedBy'
       ? `🔒 bloqueada por ${props.count} ${props.count === 1 ? 'tarea' : 'tareas'}`
       : `bloquea ${props.count} ${props.count === 1 ? 'tarea' : 'tareas'}`
-  const color = props.urgent ? 'text-red-900 font-bold' : 'text-red-500 font-medium'
+  // "Bloqueada por" stays the lighter red; "bloquea" is a darker red so the two read differently.
+  const color =
+    props.direction === 'blockedBy'
+      ? props.urgent ? 'text-red-600 font-bold' : 'text-red-500 font-medium'
+      : props.urgent ? 'text-red-950 font-bold' : 'text-red-900 font-medium'
 
   return (
     <>
