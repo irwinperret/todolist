@@ -40,7 +40,7 @@ export default function DependencyList(props: {
   const color =
     props.direction === 'blockedBy'
       ? props.urgent ? 'text-red-600 font-bold' : 'text-red-500 font-medium'
-      : props.urgent ? 'text-red-950 font-bold' : 'text-red-900 font-medium'
+      : props.urgent ? 'text-red-800 font-bold' : 'text-red-700 font-medium'
 
   return (
     <>
