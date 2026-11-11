@@ -112,7 +112,7 @@ export default function AgendaStrip() {
 
       {!collapsed && (
         <div className="px-2 pb-2">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.4fr)] gap-2">
             {days.map((day, i) => {
               const events = eventsFor(day)
               return (
@@ -166,7 +166,7 @@ export default function AgendaStrip() {
               title="Ver todas las pospuestas"
               className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 p-2 cursor-pointer"
             >
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 leading-tight">Actividades pospuestas</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 leading-tight break-words [overflow-wrap:anywhere]">Actividades pospuestas</p>
               <p className="text-[11px] text-amber-700 mb-1">Próximas 5{postponed.length > 5 ? ` de ${postponed.length}` : ''}</p>
               {postponed.length === 0 ? (
                 <p className="text-xs text-gray-400">Ninguna</p>
@@ -177,7 +177,7 @@ export default function AgendaStrip() {
                       <span className="block text-[11px] font-medium text-gray-500">
                         {new Date(t.postponed_until + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}
                       </span>
-                      <Link to={`/task/${t.id}`} onClick={(e) => e.stopPropagation()} className="block text-xs text-gray-800 break-words underline decoration-gray-300 underline-offset-2">
+                      <Link to={`/task/${t.id}`} onClick={(e) => e.stopPropagation()} className="block text-xs text-gray-800 whitespace-normal break-words [overflow-wrap:anywhere] hyphens-auto underline decoration-gray-300 underline-offset-2">
                         {t.title}
                       </Link>
                     </li>
@@ -200,7 +200,7 @@ export default function AgendaStrip() {
                       <span className="text-xs font-medium text-gray-500 shrink-0 w-14">
                         {new Date(t.postponed_until + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}
                       </span>
-                      <Link to={`/task/${t.id}`} className="text-sm text-gray-800 break-words underline decoration-gray-300 underline-offset-2">{t.title}</Link>
+                      <Link to={`/task/${t.id}`} className="min-w-0 text-sm text-gray-800 whitespace-normal break-words [overflow-wrap:anywhere] hyphens-auto underline decoration-gray-300 underline-offset-2">{t.title}</Link>
                     </li>
                   ))}
                 </ul>
