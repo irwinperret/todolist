@@ -70,11 +70,40 @@ export default function TaskDetail() {
   const draftIdRef = useRef<string | null>(null)
   const recordingTaskIdRef = useRef<string | null>(null)
 
+  // ---- autosave (existing tasks) ----
+  // What the form would write for a task row; used to see what the user changed.
+  const payloadOf = (t: Partial<TaskScore>) => ({
+    title: t.title ?? '',
+    subactivity: t.subactivity || null,
+    project_id: t.project_id ?? null,
+    discipline: t.discipline || null,
+    responsible_id: t.responsible_id ?? null,
+    indirect_id: t.indirect_id || null,
+    type: t.type || null,
+    status_id: t.status_id ?? null,
+    priority_id: t.priority_id ?? null,
+    location: t.location || null,
+    comment: t.comment || null,
+    due_date: t.due_date || null,
+    rutina_frequency: t.status_id === 10 ? (t.rutina_frequency || null) : null,
+    postponed_until: t.status_id === 6 ? (t.postponed_until || null) : null,
+  })
+  type Payload = ReturnType<typeof payloadOf>
+  const savedRef = useRef<Payload | null>(null) // last state known to be in the database
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestTaskRef = useRef<Partial<TaskScore>>({})
+  const queueRef = useRef<Promise<void>>(Promise.resolve())
+  const undoPushedRef = useRef(false)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
   const load = async (overrideId?: string) => {
     const taskId = overrideId ?? id
     if (!taskId || taskId === 'new') return
     const { data } = await supabase.from('task_scores').select('*').eq('id', taskId).single()
-    if (data) setTask(data as TaskScore)
+    if (data) {
+      savedRef.current = payloadOf(data as TaskScore)
+      setTask(data as TaskScore)
+    }
 
     const { data: ph } = await supabase
       .from('task_photos')
@@ -163,6 +192,33 @@ export default function TaskDetail() {
     }
   }, [])
 
+  // Autosave: shortly after the last change, and always when leaving or hiding the page.
+  useEffect(() => {
+    latestTaskRef.current = task
+    if (isNew || !savedRef.current) return
+    if (JSON.stringify(payloadOf(task)) === JSON.stringify(savedRef.current)) return
+    setSaveState('idle')
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
+    autoTimerRef.current = setTimeout(() => {
+      autoTimerRef.current = null
+      autosave()
+    }, 900)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task])
+
+  useEffect(() => {
+    if (isNew) return
+    const onHide = () => { if (document.visibilityState === 'hidden') flushAutosave() }
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', onHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', onHide)
+      flushAutosave()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
   const syncMeetingItems = async (taskId: string, title: string, comment: string | null, statusId: number | null | undefined) => {
     const { error } = await supabase
       .from('meeting_items')
@@ -170,6 +226,70 @@ export default function TaskDetail() {
       .eq('task_id', taskId)
     if (error) return error
     return null
+  }
+
+  // Saves only the fields the user changed, so a status set elsewhere (completar,
+  // posponer...) is never overwritten by an older copy of the form.
+  const autosave = () => {
+    queueRef.current = queueRef.current.then(async () => {
+      const taskId = id
+      const base = savedRef.current
+      if (isNew || !taskId || !base) return
+      const now = payloadOf(latestTaskRef.current)
+      if (!now.title.trim() || !now.project_id || !now.responsible_id) return // required fields missing: wait
+      const changed: Partial<Payload> = {}
+      for (const k of Object.keys(now) as (keyof Payload)[]) {
+        if (now[k] !== base[k]) (changed as Record<string, unknown>)[k] = now[k]
+      }
+      if (Object.keys(changed).length === 0) return
+      setSaveState('saving')
+      // One undo entry per visit: it puts the task back the way it was when opened.
+      if (!undoPushedRef.current) {
+        undoPushedRef.current = true
+        const { data: prevRow } = await supabase.from('tasks').select('*').eq('id', taskId).single()
+        const { data: prevItems } = await supabase.from('meeting_items').select('id, content, comment, is_done').eq('task_id', taskId)
+        if (prevRow) {
+          const orig = prevRow as Record<string, unknown>
+          const items = (prevItems ?? []) as { id: string; content: string; comment: string | null; is_done: boolean }[]
+          pushUndo(`Edición de "${String(orig.title ?? '').slice(0, 30)}"`, async () => {
+            const back: Record<string, unknown> = {}
+            for (const k of Object.keys(payloadOf({}))) back[k] = orig[k] ?? null
+            assertOk(await supabase.from('tasks').update(back).eq('id', taskId))
+            for (const it of items) {
+              assertOk(await supabase.from('meeting_items').update({ content: it.content, comment: it.comment, is_done: it.is_done }).eq('id', it.id))
+            }
+          })
+        }
+      }
+      const { error } = await supabase.from('tasks').update(changed).eq('id', taskId)
+      if (error) {
+        setSaveState('error')
+        return notifyError(error.message)
+      }
+      const itemPatch: Record<string, unknown> = {}
+      if ('title' in changed) itemPatch.content = changed.title
+      if ('comment' in changed) itemPatch.comment = changed.comment
+      if ('status_id' in changed) itemPatch.is_done = changed.status_id === 8
+      if (Object.keys(itemPatch).length > 0) {
+        const { error: me } = await supabase.from('meeting_items').update(itemPatch).eq('task_id', taskId)
+        if (me) {
+          setSaveState('error')
+          return notifyError(me.message)
+        }
+      }
+      savedRef.current = { ...base, ...changed }
+      setSaveState('saved')
+    })
+    return queueRef.current
+  }
+
+  // Runs the pending save right now (used when leaving the page).
+  const flushAutosave = () => {
+    if (autoTimerRef.current) {
+      clearTimeout(autoTimerRef.current)
+      autoTimerRef.current = null
+    }
+    return autosave()
   }
 
   const handleSave = async () => {
@@ -319,6 +439,7 @@ export default function TaskDetail() {
   const handleComplete = async () => setResolutionPrompt(true)
 
   const confirmComplete = async () => {
+    if (!isNew) await flushAutosave()
     const { error } = await supabase
       .from('tasks')
       .update({ status_id: 8, resolved_at: new Date().toISOString(), resolution_notes: resolutionText || null })
@@ -342,6 +463,7 @@ export default function TaskDetail() {
   }
 
   const confirmPostpone = async () => {
+    if (!isNew) await flushAutosave()
     if (!postponeDate) return notifyError('Elige una fecha.')
     if (isNew) {
       setTask({ ...task, status_id: 6, postponed_until: postponeDate })
@@ -360,6 +482,7 @@ export default function TaskDetail() {
   }
 
   const cancelPostpone = async () => {
+    if (!isNew) await flushAutosave()
     if (isNew) {
       setTask({ ...task, status_id: 2, postponed_until: null })
       return
@@ -373,6 +496,7 @@ export default function TaskDetail() {
   }
 
   const handleReopen = async () => {
+    if (!isNew) await flushAutosave()
     const { error } = await supabase.from('tasks').update({ status_id: 2, resolved_at: null }).eq('id', id)
     if (error) return notifyError(error.message)
     const { error: meetingError } = await supabase.from('meeting_items').update({ is_done: false }).eq('task_id', id)
@@ -393,6 +517,7 @@ export default function TaskDetail() {
   }
 
   const handleArchiveToggle = async () => {
+    if (!isNew) await flushAutosave()
     await supabase.from('tasks').update({ archived: !task.archived }).eq('id', id)
     navigate(returnTo)
   }
@@ -495,7 +620,7 @@ export default function TaskDetail() {
         )}
         <button onClick={() => setShowMore((v) => !v)} className="text-sm text-gray-500 underline">{showMore ? 'Ocultar detalles' : 'Agregar más detalle'}</button>
         {showMore && <div className="space-y-3 pt-2 border-t border-gray-100"><input type="text" placeholder="Subactividad" value={task.subactivity ?? ''} onChange={(e) => setTask({ ...task, subactivity: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><input type="text" placeholder="Disciplina" value={task.discipline ?? ''} onChange={(e) => setTask({ ...task, discipline: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><InlinePicker value={task.indirect_id ?? ''} placeholder="Involucrado (opcional)" options={[{ value: '', label: '(Ninguno)' }, ...people.map((p) => ({ value: p.id, label: p.name }))]} onChange={(v) => setTask({ ...task, indirect_id: v })} /><input type="text" placeholder="Ubicación (opcional)" value={task.location ?? ''} onChange={(e) => setTask({ ...task, location: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" /><div><label className="text-xs text-gray-500">Fecha vencimiento/seguimiento</label><div className="flex gap-2 items-center"><input type="date" value={task.due_date ?? ''} onChange={(e) => setTask({ ...task, due_date: e.target.value || null })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" />{task.due_date && <button type="button" onClick={() => setTask({ ...task, due_date: null })} className="shrink-0 px-3 py-2.5 text-sm text-gray-500 border border-gray-300 rounded-lg">Quitar</button>}</div></div><div className="space-y-1.5"><textarea ref={commentShortcuts.ref} placeholder="Comentario" value={task.comment ?? ''} onChange={(e) => setTask({ ...task, comment: e.target.value })} onKeyDown={commentShortcuts.onKeyDown} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" rows={3} /><div className="flex items-center gap-3"><FormatToolbar bold={commentShortcuts.bold} italic={commentShortcuts.italic} underline={commentShortcuts.underline} /><button type="button" onClick={addDateToComment} className="text-xs text-blue-600">+ Fecha de hoy</button></div></div></div>}
-        <div className="flex gap-2"><button onClick={handleCancel} className="flex-1 border border-red-900 text-red-900 rounded-lg py-3 font-medium">Cancelar</button><button onClick={handleSave} disabled={saving} className="flex-1 bg-gray-900 text-white rounded-lg py-3 font-medium disabled:opacity-50">{saving ? 'Guardando...' : isNew ? 'Crear tarea' : 'Guardar cambios'}</button></div>
+        {isNew ? (<div className="flex gap-2"><button onClick={handleCancel} className="flex-1 border border-red-900 text-red-900 rounded-lg py-3 font-medium">Cancelar</button><button onClick={handleSave} disabled={saving} className="flex-1 bg-gray-900 text-white rounded-lg py-3 font-medium disabled:opacity-50">{saving ? 'Guardando...' : 'Crear tarea'}</button></div>) : (<div className="space-y-1.5"><p className="text-xs text-center text-gray-500 h-4">{saveState === 'saving' ? 'Guardando...' : saveState === 'saved' ? 'Cambios guardados ✓' : saveState === 'error' ? 'No se pudo guardar' : 'Los cambios se guardan solos'}</p><button onClick={async () => { await flushAutosave(); navigate(returnTo) }} className="w-full bg-gray-900 text-white rounded-lg py-3 font-medium">Listo</button></div>)}
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"><p className="font-medium text-gray-900">Notas de voz</p>{!recording ? <button onClick={startRecording} disabled={uploadingVoice} className="w-full bg-red-700 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 disabled:opacity-50">🎤 {uploadingVoice ? 'Subiendo...' : 'Grabar nota de voz'}</button> : <button onClick={stopRecording} className="w-full bg-gray-900 text-white rounded-lg py-4 font-medium text-base flex items-center justify-center gap-2 animate-pulse">⏹ Detener ({Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')})</button>}{voiceNotes.length > 0 && <div className="space-y-2 pt-1">{voiceNotes.map((v) => <div key={v.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2">{voiceUrls[v.id] ? <audio controls src={voiceUrls[v.id]} className="flex-1 h-10" /> : <p className="text-xs text-gray-400 flex-1">Cargando...</p>}<button onClick={() => deleteVoiceNote(v)} className="text-xs text-red-500 shrink-0">Borrar</button></div>)}</div>}</div>
