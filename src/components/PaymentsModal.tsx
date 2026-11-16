@@ -161,6 +161,30 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
     return out
   }, [recent, contractor])
 
+  // Suggested next code: the contractor's latest code with its last number incremented, skipping codes already used.
+  const suggestedCode = useMemo(() => {
+    const latest = contracts[0]?.contract_code
+    if (!latest) return ''
+    const m = /^(.*?)(\d+)([^\d]*)$/.exec(latest)
+    if (!m) return ''
+    const used = new Set(recent.map((h) => (h.contract_code ?? '').toLowerCase()))
+    let n = parseInt(m[2], 10)
+    for (let i = 0; i < 500; i++) {
+      n += 1
+      const cand = `${m[1]}${String(n).padStart(m[2].length, '0')}${m[3]}`
+      if (!used.has(cand.toLowerCase())) return cand
+    }
+    return ''
+  }, [contracts, recent])
+  const typeContract = (text: string) => {
+    const t = text.trim()
+    if (!t) { setContractCode(''); setNewContract(''); return }
+    const hit = contracts.find((c) => (c.contract_code ?? '').toLowerCase() === t.toLowerCase())
+    if (hit) { setNewContract(''); pickContract(hit.contract_code as string); return }
+    setContractCode('__new__')
+    setNewContract(text)
+  }
+
   // The Excel is also checked, so a number already used there (e.g. added by hand) is skipped.
   const [excelMax, setExcelMax] = useState<number | null>(null)
   useEffect(() => {
@@ -467,14 +491,25 @@ function NewOrder({ project, history, onSaved }: { project: string; history: Pay
       {contractorName && (
         <div>
           <label className={label}>Contrato / Presupuesto</label>
-          <InlinePicker
-            value={contractCode}
-            placeholder="Selecciona el contrato"
-            options={contracts.map((c) => ({ value: c.contract_code as string, label: `${c.contract_code}  ·  ${(isVt ? c.category_n2 : c.discipline) ?? ''}` }))}
-            extra={{ value: '__new__', label: '+ Nuevo contrato o presupuesto…' }}
-            onChange={pickContract}
+          <input
+            className={input}
+            list="contract-options"
+            placeholder="Escribe o elige el contrato"
+            value={isNewContract ? newContract : contractCode}
+            onChange={(e) => typeContract(e.target.value)}
+            autoComplete="off"
           />
-          {isNewContract && <input className={`${input} mt-2`} placeholder={isPgm ? 'Código (ej. SHS-01)' : isVt ? 'Código (ej. EV-03)' : 'Código (ej. CON-PLO-FER-03)'} value={newContract} onChange={(e) => setNewContract(e.target.value)} />}
+          <datalist id="contract-options">
+            {contracts.map((c) => (
+              <option key={c.contract_code as string} value={c.contract_code as string}>{(isVt ? c.category_n2 : c.discipline) ?? ''}</option>
+            ))}
+          </datalist>
+          {suggestedCode && code !== suggestedCode && (
+            <button type="button" className="mt-1.5 text-xs text-blue-600 underline" onClick={() => typeContract(suggestedCode)}>
+              Usar {suggestedCode}
+            </button>
+          )}
+          {isNewContract && newContract.trim() && <p className="mt-1 text-xs text-gray-500">Contrato nuevo: {newContract.trim()}</p>}
         </div>
       )}
 
