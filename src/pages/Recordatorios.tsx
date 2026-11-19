@@ -19,12 +19,12 @@ export default function Recordatorios() {
       supabase
         .from('task_scores')
         .select('*')
-        .not('due_date', 'is', null)
+        .or('due_date.not.is.null,postponed_until.not.is.null')
         .neq('status_id', 8)
         .eq('archived', false)
         .then(({ data }) => {
           const rows = (data as TaskScore[]) ?? []
-          rows.sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
+          rows.sort((a, b) => (a.postponed_until ?? a.due_date ?? '').localeCompare(b.postponed_until ?? b.due_date ?? ''))
           setTasks(rows)
           setLoading(false)
         })
@@ -42,7 +42,9 @@ export default function Recordatorios() {
 
       <div className="space-y-2">
         {tasks.map((t) => {
-          const overdue = isOverdue(t.due_date, t.status_id)
+          const postponed = t.status_id === 6 && !!t.postponed_until
+          const shownDate = postponed ? t.postponed_until : t.due_date
+          const overdue = !postponed && isOverdue(t.due_date, t.status_id)
           const cardBg = getTaskCardStyle(t, { includeFollowUp: false })
 
           return (
@@ -54,12 +56,12 @@ export default function Recordatorios() {
                   <ProjectChip name={projectName(t.project_id)} color={projectColor(t.project_id)} />
                   <span className="text-gray-400">·</span>
                   <span className="text-purple-700 font-medium">{personName(t.responsible_id)}</span>
-                  {t.due_date && (
+                  {shownDate && (
                     <>
                       <span className="text-gray-400">·</span>
-                      <span className={overdue ? 'text-red-600 font-semibold' : 'text-gray-500'}>
-                        {overdue ? 'venció el ' : 'vence '}
-                        {new Date(t.due_date + 'T00:00:00').toLocaleDateString()}
+                      <span className={postponed ? 'text-amber-700 font-medium' : overdue ? 'text-red-600 font-semibold' : 'text-gray-500'}>
+                        {postponed ? '⏸ pospuesta hasta el ' : overdue ? 'venció el ' : 'vence '}
+                        {new Date(shownDate + 'T00:00:00').toLocaleDateString()}
                       </span>
                     </>
                   )}
@@ -68,10 +70,10 @@ export default function Recordatorios() {
                   </span>
                 </div>
               </Link>
-              {t.due_date && (
+              {shownDate && (
                 <a href={googleCalendarUrl({
                     title: t.title,
-                    dueDate: t.due_date,
+                    dueDate: shownDate,
                     details: t.comment,
                     location: t.location,
                   })}
