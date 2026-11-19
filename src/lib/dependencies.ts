@@ -7,11 +7,23 @@ export type FreedTask = { id: string; title: string }
 // a list screen loads, before the fetched tasks are shown.
 export async function reconcilePostponedTasks(): Promise<void> {
   const today = new Date().toISOString().slice(0, 10)
-  await supabase
+  const { data } = await supabase
     .from('tasks')
-    .update({ status_id: 2, postponed_until: null })
+    .select('id, postponed_until')
     .eq('status_id', 6)
     .lte('postponed_until', today)
+  const byDate = new Map<string, string[]>()
+  for (const r of (data as { id: string; postponed_until: string }[]) ?? []) {
+    byDate.set(r.postponed_until, [...(byDate.get(r.postponed_until) ?? []), r.id])
+  }
+  // returned_from_postponed remembers the date it came back, so the To Do can
+  // flag it until the task is opened or its status/date is changed.
+  for (const [date, ids] of byDate) {
+    await supabase
+      .from('tasks')
+      .update({ status_id: 2, postponed_until: null, returned_from_postponed: date })
+      .in('id', ids)
+  }
 }
 
 // Call this right after marking a task's outgoing dependencies as resolved.

@@ -27,6 +27,22 @@ type Bucket = 'activas' | 'none' | 'meDeben' | 'revision' | 'largoPlazo' | 'todo
 type ContactAction = 'call' | 'whatsapp-call' | 'whatsapp-message' | 'email'
 
 // Urgente + Muy importante, then Importante, then everything else.
+// Tasks that just came back from being postponed move up within their own
+// priority level only (inside each run of equal priority), so the priority
+// order itself is never changed.
+const bumpReturned = (rows: TaskScore[]): TaskScore[] => {
+  const out: TaskScore[] = []
+  let i = 0
+  while (i < rows.length) {
+    let j = i
+    while (j < rows.length && rows[j].priority_id === rows[i].priority_id) j++
+    const run = rows.slice(i, j)
+    out.push(...run.filter((t) => t.returned_from_postponed), ...run.filter((t) => !t.returned_from_postponed))
+    i = j
+  }
+  return out
+}
+
 const priorityGroup = (id: number) => (id <= 2 ? 0 : id === 3 ? 1 : 2)
 
 export default function Dashboard() {
@@ -60,7 +76,7 @@ export default function Dashboard() {
       .neq('status_id', 8) // exclude Completada
       .order('priority_score', { ascending: false })
 
-    if (!error) setTasks((data as TaskScore[]) ?? [])
+    if (!error) setTasks(bumpReturned((data as TaskScore[]) ?? []))
     setLoading(false)
   }
 
@@ -78,8 +94,8 @@ export default function Dashboard() {
       supabase.from('task_dependencies').select('task_id, resolved_at').eq('depends_on_task_id', taskId),
     ])
 
-    const payload: { status_id: number; resolved_at?: string; rutina_frequency?: string | null } =
-      newStatusId === 8 ? { status_id: 8, resolved_at: new Date().toISOString() } : { status_id: newStatusId }
+    const payload: { status_id: number; resolved_at?: string; rutina_frequency?: string | null; returned_from_postponed: null } =
+      newStatusId === 8 ? { status_id: 8, resolved_at: new Date().toISOString(), returned_from_postponed: null } : { status_id: newStatusId, returned_from_postponed: null }
 
     if (newStatusId === RUTINA_STATUS_ID) {
       const freq = window.prompt('¿Cada cuánto tiempo es esta rutina? (ej. Semanal, Mensual, cada 3 meses)')
@@ -456,6 +472,13 @@ export default function Dashboard() {
                   <p className="text-gray-900" dangerouslySetInnerHTML={{ __html: formatRichText(t.title) }} />
                   {t.subactivity && (
                     <p className={`text-sm ${urgent ? 'text-gray-800' : 'text-gray-500'}`}>{t.subactivity}</p>
+                  )}
+                  {t.returned_from_postponed && (
+                    <span className="inline-block mt-1 text-[11px] font-medium rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5">
+                      ⏰ Volvió de pospuesta{t.returned_from_postponed < new Date().toISOString().slice(0, 10)
+                        ? ` el ${new Date(t.returned_from_postponed + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}`
+                        : ' hoy'}
+                    </span>
                   )}
                 </div>
 

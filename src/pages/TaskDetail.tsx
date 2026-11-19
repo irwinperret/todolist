@@ -102,7 +102,11 @@ export default function TaskDetail() {
     const { data } = await supabase.from('task_scores').select('*').eq('id', taskId).single()
     if (data) {
       savedRef.current = payloadOf(data as TaskScore)
-      setTask(data as TaskScore)
+      setTask({ ...(data as TaskScore), returned_from_postponed: null })
+      if ((data as TaskScore).returned_from_postponed) {
+        // Opening the task clears the "back from postponed" flag.
+        supabase.from('tasks').update({ returned_from_postponed: null }).eq('id', taskId).then(() => {})
+      }
     }
 
     const { data: ph } = await supabase

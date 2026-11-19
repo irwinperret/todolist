@@ -47,6 +47,7 @@ export type TaskScore = {
   resolved_at: string | null
   rutina_frequency: string | null
   postponed_until: string | null
+  returned_from_postponed: string | null
   archived: boolean
   created_at: string
   updated_at: string
